@@ -43,3 +43,11 @@ Tips
 - Create a keyboard shortcut that runs `qn add "$(pbpaste)"` or `qn add "text"` in your shell/launcher for super-fast capture.
 - Sync `~/.quick_notes` with cloud storage by pointing `QUICK_NOTES_DIR` to a synced folder.
 - Notes are UTF-8; keep your editor configured for UTF-8 to avoid encoding surprises.
+- Example zsh key binding for instant capture from the clipboard:
+  - Add to `~/.zshrc`:
+    ```
+    function qnclip() { qn add "$(pbpaste)"; }
+    zle -N qnclip
+    bindkey '^q' qnclip
+    ```
+  - Reload your shell, copy text, press `Ctrl+Q` to capture a note.

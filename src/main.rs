@@ -7,6 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
+use yansi::Paint;
 
 #[derive(Debug, Clone)]
 struct Note {
@@ -303,19 +304,21 @@ fn parse_timestamp(ts: &str) -> Option<DateTime<FixedOffset>> {
 fn render_markdown(input: &str) -> String {
     let mut rendered = String::new();
     let mut list_depth: usize = 0;
+    let use_color = env::var("NO_COLOR").is_err();
 
     for event in Parser::new(input) {
         match event {
             Event::Start(Tag::Heading { level, .. }) => {
                 rendered.push('\n');
-                rendered.push_str(match level {
+                let mark = match level {
                     HeadingLevel::H1 => "# ",
                     HeadingLevel::H2 => "## ",
                     HeadingLevel::H3 => "### ",
                     HeadingLevel::H4 => "#### ",
                     HeadingLevel::H5 => "##### ",
                     _ => "###### ",
-                });
+                };
+                push_styled(&mut rendered, mark, Style::Heading, use_color);
             }
             Event::End(TagEnd::Heading(_)) => rendered.push('\n'),
             Event::Start(Tag::List(_)) => {
@@ -329,12 +332,14 @@ fn render_markdown(input: &str) -> String {
             }
             Event::Start(Tag::Item) => {
                 rendered.push_str(&"  ".repeat(list_depth.saturating_sub(1)));
-                rendered.push_str("- ");
+                push_styled(&mut rendered, "- ", Style::Bullet, use_color);
             }
-            Event::Text(t) | Event::Code(t) => rendered.push_str(&t),
+            Event::Text(t) | Event::Code(t) => {
+                push_styled(&mut rendered, &t, Style::Body, use_color)
+            }
             Event::SoftBreak | Event::HardBreak => rendered.push('\n'),
             Event::Rule => {
-                rendered.push_str("\n---\n");
+                push_styled(&mut rendered, "\n---\n", Style::Rule, use_color);
             }
             Event::Html(t) => rendered.push_str(&t),
             _ => {}
@@ -342,4 +347,26 @@ fn render_markdown(input: &str) -> String {
     }
 
     rendered.trim().to_string()
+}
+
+#[derive(Clone, Copy)]
+enum Style {
+    Heading,
+    Bullet,
+    Rule,
+    Body,
+}
+
+fn push_styled(buf: &mut String, text: &str, style: Style, use_color: bool) {
+    if use_color {
+        let painted = match style {
+            Style::Heading => Paint::cyan(text).bold(),
+            Style::Bullet => Paint::yellow(text).bold(),
+            Style::Rule => Paint::new(text).dim(),
+            Style::Body => Paint::new(text),
+        };
+        buf.push_str(&painted.to_string());
+    } else {
+        buf.push_str(text);
+    }
 }

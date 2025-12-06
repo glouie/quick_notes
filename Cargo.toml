@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 chrono = { version = "0.4", features = ["clock"] }
 pulldown-cmark = "0.10"
+yansi = "1.0"
