@@ -17,7 +17,7 @@ Usage
 - `qn new "Title" [body...]` — create with explicit title and optional body.
 - `qn list` — show ids, titles, and timestamps (sorted by most recently updated).
 - `qn view <id>` — print the note plus header.
-- `qn view <id> --render` or `qn render <id>` — render Markdown in the terminal (headings, lists, rules) for quick reading.
+- `qn view <id> --render` or `qn render <id>` — render Markdown in the terminal (headings, lists, rules) for quick reading. Add `--plain` or set `NO_COLOR=1` to disable color.
 - `qn edit <id>` — open in `$EDITOR` (falls back to `vi`), then refreshes the Updated timestamp.
 - `qn path` — print the notes directory.
 - `qn help` — usage overview.

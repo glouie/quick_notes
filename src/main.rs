@@ -55,7 +55,8 @@ Usage:
   qn add \"note text\"              Quick add with generated title
   qn new <title> [body...]        New note with title and optional body
   qn list                         List notes
-  qn view <id> [--render|-r]      Show a note (render markdown with --render)
+  qn view <id> [--render|-r] [--plain]
+                                  Show a note (render markdown with --render; disable color with --plain)
   qn render <id>                  Same as: qn view <id> --render
   qn edit <id>                    Edit in $EDITOR (updates timestamp)
   qn path                         Show the notes directory
@@ -145,18 +146,22 @@ fn list_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Box<dyn Error>> {
-    let id = args.get(0).ok_or("Usage: qn view <id> [--render]")?;
+    let id = args
+        .get(0)
+        .ok_or("Usage: qn view <id> [--render|-r] [--plain]")?;
     let render = force_render
         || args
             .iter()
             .any(|a| a == "--render" || a == "-r" || a == "render");
+    let plain = args.iter().any(|a| a == "--plain");
+    let use_color = !plain && env::var("NO_COLOR").is_err();
     let path = note_path(dir, id);
     if !path.exists() {
         return Err(format!("Note {id} not found").into());
     }
     let note = parse_note(&path)?;
     if render {
-        let rendered = render_markdown(&note.body);
+        let rendered = render_markdown(&note.body, use_color);
         println!(
             "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
             note.title, note.id, note.created, note.updated, rendered
@@ -301,10 +306,9 @@ fn parse_timestamp(ts: &str) -> Option<DateTime<FixedOffset>> {
     DateTime::parse_from_str(ts, "%m/%d/%Y %I:%M %p %:z").ok()
 }
 
-fn render_markdown(input: &str) -> String {
+fn render_markdown(input: &str, use_color: bool) -> String {
     let mut rendered = String::new();
     let mut list_depth: usize = 0;
-    let use_color = env::var("NO_COLOR").is_err();
 
     for event in Parser::new(input) {
         match event {
