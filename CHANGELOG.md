@@ -10,3 +10,5 @@ All notable changes are documented in this file. Version numbers follow semantic
 - Markdown render mode for terminal reading with colored headings/lists when supported.
 - Render mode honors `--plain` flag and `NO_COLOR` for non-colored output.
 - Document quick keyboard binding example for clipboard capture.
+- Note ids now default to a timestamp (`YYYYMMDDHHMMSS`) to keep them sortable and unique; suffixes are added only if necessary.
+- Added zsh + fzf completion helper in `contrib/quick_notes_fzf.zsh` with preview support for note selection on `view`/`render`/`edit`.

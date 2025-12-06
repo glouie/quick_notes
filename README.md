@@ -51,3 +51,6 @@ Tips
     bindkey '^q' qnclip
     ```
   - Reload your shell, copy text, press `Ctrl+Q` to capture a note.
+- FZF completion for note selection (zsh):
+  - Source `contrib/quick_notes_fzf.zsh` in your shell (`source /path/to/quick_notes/contrib/quick_notes_fzf.zsh`).
+  - On `qn view`/`qn render`/`qn edit`, press Tab to open an fzf list of note ids with a preview of each file; the selected id is inserted automatically.

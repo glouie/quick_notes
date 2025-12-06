@@ -6,7 +6,6 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
 use yansi::Paint;
 
 #[derive(Debug, Clone)]
@@ -219,10 +218,7 @@ fn note_path(dir: &Path, id: &str) -> PathBuf {
 }
 
 fn unique_id(dir: &Path) -> io::Result<String> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let base = format!("{}", now.as_secs());
+    let base = Local::now().format("%Y%m%d%H%M%S").to_string();
     for suffix in 0..1000 {
         let candidate = if suffix == 0 {
             base.clone()
@@ -290,11 +286,7 @@ fn parse_note(path: &Path) -> io::Result<Note> {
 }
 
 fn short_timestamp() -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    now.to_string()
+    Local::now().format("%Y%m%d%H%M%S").to_string()
 }
 
 fn timestamp_string() -> String {
