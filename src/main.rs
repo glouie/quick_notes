@@ -138,10 +138,8 @@ fn list_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     for (_, n) in notes {
-        println!(
-            "{}  | {}  | created {}  | updated {}",
-            n.id, n.title, n.created, n.updated
-        );
+        let preview = preview_line(&n);
+        println!("{}  | {}  | {}", n.id, n.updated, preview);
     }
     Ok(())
 }
@@ -309,6 +307,22 @@ fn timestamp_string() -> String {
 
 fn parse_timestamp(ts: &str) -> Option<DateTime<FixedOffset>> {
     DateTime::parse_from_str(ts, "%m/%d/%Y %I:%M %p %:z").ok()
+}
+
+fn preview_line(note: &Note) -> String {
+    let mut text = format!(
+        "{} {}",
+        note.title.trim(),
+        note.body.lines().next().unwrap_or("").trim()
+    )
+    .trim()
+    .to_string();
+    const MAX_LEN: usize = 100;
+    if text.chars().count() > MAX_LEN {
+        text = text.chars().take(MAX_LEN).collect::<String>();
+        text.push('…');
+    }
+    text
 }
 
 fn render_markdown(input: &str, use_color: bool) -> String {

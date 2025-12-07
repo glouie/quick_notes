@@ -5,17 +5,13 @@
 
 _qn() {
   local state
-  _arguments \
-    '1:command:(add new list view render edit path help)' \
+  _arguments -C \
+    '1:command:(add new list view render edit path help completion)' \
     '2:note id:_qn_note_ids' \
     '*::text:->text'
 }
 
 _qn_note_ids() {
-  # Only trigger fzf for commands that take a note id (second argument position).
-  if (( CURRENT != 3 )); then
-    return 1
-  fi
   if [[ ${words[2]} != view && ${words[2]} != render && ${words[2]} != edit ]]; then
     return 1
   fi
