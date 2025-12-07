@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "render" => view_note(args, &dir, true)?,
         "edit" => edit_note(args, &dir)?,
         "path" => println!("{}", dir.display()),
+        "completion" => print_completion(args)?,
         "help" => print_help(),
         other => {
             eprintln!("Unknown command: {other}");
@@ -59,6 +60,7 @@ Usage:
   qn render <id>                  Same as: qn view <id> --render
   qn edit <id>                    Edit in $EDITOR (updates timestamp)
   qn path                         Show the notes directory
+  qn completion zsh               Print zsh completion script for fzf-powered ids
   qn help                         Show this message
 
 Environment:
@@ -142,6 +144,17 @@ fn list_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
         );
     }
     Ok(())
+}
+
+fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let shell = args.get(0).map(|s| s.as_str()).unwrap_or("zsh");
+    match shell {
+        "zsh" => {
+            println!("{}", include_str!("../contrib/quick_notes_fzf.zsh"));
+            Ok(())
+        }
+        _ => Err("Only zsh completion is supported right now".into()),
+    }
 }
 
 fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Box<dyn Error>> {

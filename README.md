@@ -20,6 +20,7 @@ Usage
 - `qn view <id> --render` or `qn render <id>` — render Markdown in the terminal (headings, lists, rules) for quick reading. Add `--plain` or set `NO_COLOR=1` to disable color.
 - `qn edit <id>` — open in `$EDITOR` (falls back to `vi`), then refreshes the Updated timestamp.
 - `qn path` — print the notes directory.
+- `qn completion zsh` — print the zsh completion script (fzf-powered note id selection with preview).
 - `qn help` — usage overview.
 
 Notes are written with a small header:
@@ -52,5 +53,5 @@ Tips
     ```
   - Reload your shell, copy text, press `Ctrl+Q` to capture a note.
 - FZF completion for note selection (zsh):
-  - Source `contrib/quick_notes_fzf.zsh` in your shell (`source /path/to/quick_notes/contrib/quick_notes_fzf.zsh`).
+  - Add this one-liner to `~/.zshrc` (after `compinit`): `source <(qn completion zsh)`
   - On `qn view`/`qn render`/`qn edit`, press Tab to open an fzf list of note ids with a preview of each file; the selected id is inserted automatically.
