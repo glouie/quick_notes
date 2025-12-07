@@ -12,8 +12,8 @@ _qn() {
 }
 
 _qn_note_ids() {
-  # Only trigger fzf for commands that take a note id.
-  if (( CURRENT != 2 )); then
+  # Only trigger fzf for commands that take a note id (second argument position).
+  if (( CURRENT != 3 )); then
     return 1
   fi
   if [[ ${words[2]} != view && ${words[2]} != render && ${words[2]} != edit ]]; then
@@ -21,6 +21,9 @@ _qn_note_ids() {
   fi
 
   local dir=${QUICK_NOTES_DIR:-$HOME/.quick_notes}
+  if [[ ! -d $dir ]]; then
+    return 1
+  fi
   local -a files
   files=("${(@f)$(find "$dir" -maxdepth 1 -name '*.md' -print 2>/dev/null)}")
   if (( ${#files} == 0 )); then
