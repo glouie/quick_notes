@@ -6,13 +6,13 @@
 _qn() {
   local state
   _arguments -C \
-    '1:command:(add new list view render edit path help completion)' \
+    '1:command:(add new list view render edit delete path help completion)' \
     '2:note id:_qn_note_ids' \
     '*::text:->text'
 }
 
 _qn_note_ids() {
-  if [[ ${words[2]} != view && ${words[2]} != render && ${words[2]} != edit ]]; then
+  if [[ ${words[2]} != view && ${words[2]} != render && ${words[2]} != edit && ${words[2]} != delete ]]; then
     return 1
   fi
 
@@ -26,11 +26,18 @@ _qn_note_ids() {
     return 1
   fi
 
-  local selection
-  selection=$(printf '%s\n' "${files[@]}" | FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} --preview 'sed -n \"1,80p\" {}' --preview-window=down:70%" fzf)
-  if [[ -n $selection ]]; then
-    compadd -- ${selection:t:r}
+  # If fzf is missing, fall back to plain completion.
+  if ! command -v fzf >/dev/null 2>&1; then
+    compadd -- ${files:t:r}
+    return 0
   fi
+
+  local selection
+  selection=$(printf '%s\n' "${files[@]}" | FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} --preview 'sed -n \"1,80p\" {}' --preview-window=down:70%" fzf 2>/dev/null)
+  if [[ -z $selection ]]; then
+    return 1
+  fi
+  compadd -- ${(f)${selection:t:r}}
 }
 
 compdef _qn qn quick_notes

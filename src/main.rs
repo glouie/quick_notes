@@ -3,7 +3,7 @@ use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 use std::env;
 use std::error::Error;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use yansi::Paint;
@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "view" => view_note(args, &dir, false)?,
         "render" => view_note(args, &dir, true)?,
         "edit" => edit_note(args, &dir)?,
+        "delete" => delete_notes(args, &dir)?,
         "path" => println!("{}", dir.display()),
         "completion" => print_completion(args)?,
         "help" => print_help(),
@@ -59,6 +60,7 @@ Usage:
                                   Show a note (render markdown with --render; disable color with --plain)
   qn render <id>                  Same as: qn view <id> --render
   qn edit <id>                    Edit in $EDITOR (updates timestamp)
+  qn delete [ids...] [--fzf]      Delete one or more notes (fzf multi-select when --fzf or no ids and fzf available)
   qn path                         Show the notes directory
   qn completion zsh               Print zsh completion script for fzf-powered ids
   qn help                         Show this message
@@ -117,17 +119,12 @@ fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
 fn list_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut notes: Vec<(i64, Note)> = Vec::new();
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_file()
-            && entry.path().extension().and_then(|s| s.to_str()) == Some("md")
-        {
-            if let Ok(note) = parse_note(&entry.path()) {
-                let sort_key = parse_timestamp(&note.updated)
-                    .map(|d| d.timestamp())
-                    .unwrap_or_default();
-                notes.push((sort_key, note));
-            }
+    for path in list_note_files(dir)? {
+        if let Ok(note) = parse_note(&path) {
+            let sort_key = parse_timestamp(&note.updated)
+                .map(|d| d.timestamp())
+                .unwrap_or_default();
+            notes.push((sort_key, note));
         }
     }
     notes.sort_by(|a, b| b.0.cmp(&a.0));
@@ -207,6 +204,82 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     note.updated = timestamp_string();
     write_note(&note, dir)?;
     println!("Updated {}", note.id);
+    Ok(())
+}
+
+fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    let mut use_fzf = false;
+    let mut ids: Vec<String> = Vec::new();
+    for a in args {
+        if a == "--fzf" {
+            use_fzf = true;
+        } else {
+            ids.push(a);
+        }
+    }
+
+    if ids.is_empty() {
+        if !use_fzf && !has_fzf() {
+            return Err("Provide ids or install fzf / use --fzf for interactive delete".into());
+        }
+        let files = list_note_files(dir)?;
+        if files.is_empty() {
+            println!("No notes to delete.");
+            return Ok(());
+        }
+        if !has_fzf() {
+            return Err("fzf not available; cannot launch interactive delete".into());
+        }
+
+        let input = files
+            .iter()
+            .map(|p| p.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let mut child = Command::new("fzf")
+            .arg("--multi")
+            .arg("--preview")
+            .arg("sed -n '1,120p' {}")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin.write_all(input.as_bytes())?;
+        }
+        let output = child.wait_with_output()?;
+        if !output.status.success() || output.stdout.is_empty() {
+            println!("No selection made; nothing deleted.");
+            return Ok(());
+        }
+        let selected_paths = String::from_utf8_lossy(&output.stdout);
+        ids = selected_paths
+            .lines()
+            .filter_map(|l| Path::new(l).file_stem()?.to_str())
+            .map(|s| s.to_string())
+            .collect();
+    }
+
+    if ids.is_empty() {
+        println!("No notes deleted.");
+        return Ok(());
+    }
+
+    let mut deleted = 0;
+    for id in ids {
+        let path = note_path(dir, &id);
+        if path.exists() {
+            fs::remove_file(&path)?;
+            println!("Deleted {id}");
+            deleted += 1;
+        } else {
+            println!("Note {id} not found");
+        }
+    }
+    if deleted == 0 {
+        println!("No notes deleted.");
+    }
     Ok(())
 }
 
@@ -307,6 +380,28 @@ fn timestamp_string() -> String {
 
 fn parse_timestamp(ts: &str) -> Option<DateTime<FixedOffset>> {
     DateTime::parse_from_str(ts, "%m/%d/%Y %I:%M %p %:z").ok()
+}
+
+fn has_fzf() -> bool {
+    Command::new("fzf")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok()
+}
+
+fn list_note_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_file()
+            && entry.path().extension().and_then(|s| s.to_str()) == Some("md")
+        {
+            files.push(entry.path());
+        }
+    }
+    Ok(files)
 }
 
 fn preview_line(note: &Note) -> String {

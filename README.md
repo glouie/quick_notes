@@ -19,6 +19,7 @@ Usage
 - `qn view <id>` — print the note plus header.
 - `qn view <id> --render` or `qn render <id>` — render Markdown in the terminal (headings, lists, rules) for quick reading. Add `--plain` or set `NO_COLOR=1` to disable color.
 - `qn edit <id>` — open in `$EDITOR` (falls back to `vi`), then refreshes the Updated timestamp.
+- `qn delete <id> [more ids...]` — delete one or more notes; use `--fzf` or call with no ids (and fzf installed) to pick multiple notes in an interactive preview list.
 - `qn path` — print the notes directory.
 - `qn completion zsh` — print the zsh completion script (fzf-powered note id selection with preview).
 - `qn help` — usage overview.

@@ -13,3 +13,4 @@ All notable changes are documented in this file. Version numbers follow semantic
 - Note ids now default to a timestamp (`YYYYMMDDHHMMSS`) to keep them sortable and unique; suffixes are added only if necessary.
 - Added zsh + fzf completion helper in `contrib/quick_notes_fzf.zsh` with preview support for note selection on `view`/`render`/`edit`.
 - Introduced `qn completion zsh` so `.zshrc` can source completions via `source <(qn completion zsh)`.
+- Added `delete` command with optional fzf multi-select and preview for batch deletions; list output now shows compact previews.
