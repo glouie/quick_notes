@@ -6,7 +6,7 @@
 _qn() {
   local state
   _arguments -C \
-    '1:command:(add new list view render edit delete path help completion)' \
+    '1:command:(add new list view render edit delete seed path help completion)' \
     '2:note id:_qn_note_ids' \
     '*::text:->text'
 }
@@ -32,8 +32,13 @@ _qn_note_ids() {
     return 0
   fi
 
+  local fzf_opts="--preview 'sed -n \"1,80p\" {}' --preview-window=down:70%"
+  if [[ ${words[2]} == delete ]]; then
+    fzf_opts="$fzf_opts --multi"
+  fi
+
   local selection
-  selection=$(printf '%s\n' "${files[@]}" | FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} --preview 'sed -n \"1,80p\" {}' --preview-window=down:70%" fzf 2>/dev/null)
+  selection=$(printf '%s\n' "${files[@]}" | FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} ${fzf_opts}" fzf 2>/dev/null || true)
   if [[ -z $selection ]]; then
     return 1
   fi

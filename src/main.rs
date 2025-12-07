@@ -1,5 +1,6 @@
 use chrono::{DateTime, FixedOffset, Local};
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
+use std::cmp::Ordering;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -15,6 +16,7 @@ struct Note {
     created: String,
     updated: String,
     body: String,
+    size_bytes: u64,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -31,11 +33,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     match cmd.as_str() {
         "add" => quick_add(args, &dir)?,
         "new" => new_note(args, &dir)?,
-        "list" => list_notes(&dir)?,
+        "list" => list_notes(args, &dir)?,
         "view" => view_note(args, &dir, false)?,
         "render" => view_note(args, &dir, true)?,
         "edit" => edit_note(args, &dir)?,
         "delete" => delete_notes(args, &dir)?,
+        "seed" => seed_notes(args, &dir)?,
         "path" => println!("{}", dir.display()),
         "completion" => print_completion(args)?,
         "help" => print_help(),
@@ -61,6 +64,7 @@ Usage:
   qn render <id>                  Same as: qn view <id> --render
   qn edit <id>                    Edit in $EDITOR (updates timestamp)
   qn delete [ids...] [--fzf]      Delete one or more notes (fzf multi-select when --fzf or no ids and fzf available)
+  qn seed <count> [--chars N]     Generate test notes (random body of N chars; default 400)
   qn path                         Show the notes directory
   qn completion zsh               Print zsh completion script for fzf-powered ids
   qn help                         Show this message
@@ -117,24 +121,54 @@ fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
-    let mut notes: Vec<(i64, Note)> = Vec::new();
-    for path in list_note_files(dir)? {
-        if let Ok(note) = parse_note(&path) {
-            let sort_key = parse_timestamp(&note.updated)
-                .map(|d| d.timestamp())
-                .unwrap_or_default();
-            notes.push((sort_key, note));
+fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    let mut sort_field = "updated".to_string();
+    let mut ascending = false;
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--sort" => {
+                if let Some(v) = iter.next() {
+                    sort_field = v;
+                } else {
+                    return Err("Provide a sort field: created|updated|size".into());
+                }
+            }
+            "--asc" => ascending = true,
+            "--desc" => ascending = false,
+            other => {
+                return Err(format!("Unknown flag for list: {other}").into());
+            }
         }
     }
-    notes.sort_by(|a, b| b.0.cmp(&a.0));
+
+    let mut notes: Vec<Note> = Vec::new();
+    for (path, size) in list_note_files(dir)? {
+        if let Ok(note) = parse_note(&path, size) {
+            notes.push(note);
+        }
+    }
+
+    let comparator = |a: &Note, b: &Note| -> std::cmp::Ordering {
+        match sort_field.as_str() {
+            "created" => cmp_dt(&a.created, &b.created),
+            "updated" => cmp_dt(&a.updated, &b.updated),
+            "size" => a.size_bytes.cmp(&b.size_bytes),
+            _ => cmp_dt(&a.updated, &b.updated),
+        }
+    };
+
+    notes.sort_by(|a, b| {
+        let ord = comparator(a, b);
+        if ascending { ord } else { ord.reverse() }
+    });
 
     if notes.is_empty() {
         println!("No notes yet. Try `qn add \"text\"`.");
         return Ok(());
     }
 
-    for (_, n) in notes {
+    for n in notes {
         let preview = preview_line(&n);
         println!("{}  | {}  | {}", n.id, n.updated, preview);
     }
@@ -166,7 +200,8 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
     if !path.exists() {
         return Err(format!("Note {id} not found").into());
     }
-    let note = parse_note(&path)?;
+    let size = fs::metadata(&path)?.len();
+    let note = parse_note(&path, size)?;
     if render {
         let rendered = render_markdown(&note.body, use_color);
         println!(
@@ -190,17 +225,29 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     let editor = env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
-    let status = Command::new(editor)
-        .arg(&path)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
-    if !status.success() {
-        return Err("Editor exited with non-zero status".into());
+    let mut used_popup = false;
+    if has_fzf() {
+        used_popup = launch_editor_popup(&editor, &path)?;
+        // If popup was canceled, skip updating timestamp.
+        if !used_popup {
+            println!("Edit canceled.");
+            return Ok(());
+        }
+    }
+    if !used_popup {
+        let status = Command::new(&editor)
+            .arg(&path)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?;
+        if !status.success() {
+            return Err("Editor exited with non-zero status".into());
+        }
     }
 
-    let mut note = parse_note(&path)?;
+    let size = fs::metadata(&path)?.len();
+    let mut note = parse_note(&path, size)?;
     note.updated = timestamp_string();
     write_note(&note, dir)?;
     println!("Updated {}", note.id);
@@ -233,7 +280,7 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
         let input = files
             .iter()
-            .map(|p| p.to_string_lossy())
+            .map(|(p, _)| p.to_string_lossy())
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -283,17 +330,49 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    if args.is_empty() {
+        return Err("Usage: qn seed <count> [--chars N]".into());
+    }
+    let count: usize = args[0].parse().map_err(|_| "Count must be a number")?;
+    let mut body_len: usize = 400;
+    let mut iter = args.into_iter().skip(1);
+    while let Some(arg) = iter.next() {
+        if arg == "--chars" {
+            if let Some(v) = iter.next() {
+                body_len = v.parse().map_err(|_| "chars must be a number")?;
+            } else {
+                return Err("Provide a value for --chars".into());
+            }
+        } else {
+            return Err(format!("Unknown flag for seed: {arg}").into());
+        }
+    }
+
+    for i in 0..count {
+        let title = format!("Seed note {}", short_timestamp());
+        let body = generate_body(body_len, i);
+        let note = create_note(title, body, dir)?;
+        if (i + 1) % 50 == 0 || i + 1 == count {
+            println!("Generated {}/{} (last id {})", i + 1, count, note.id);
+        }
+    }
+    Ok(())
+}
+
 fn create_note(title: String, body: String, dir: &Path) -> Result<Note, Box<dyn Error>> {
     let id = unique_id(dir)?;
     let now = timestamp_string();
-    let note = Note {
+    let mut note = Note {
         id: id.clone(),
         title,
         created: now.clone(),
         updated: now,
         body,
+        size_bytes: 0,
     };
     write_note(&note, dir)?;
+    note.size_bytes = fs::metadata(note_path(dir, &note.id))?.len();
     Ok(note)
 }
 
@@ -302,8 +381,8 @@ fn note_path(dir: &Path, id: &str) -> PathBuf {
 }
 
 fn unique_id(dir: &Path) -> io::Result<String> {
-    let base = Local::now().format("%Y%m%d%H%M%S").to_string();
-    for suffix in 0..1000 {
+    let base = Local::now().timestamp_micros().to_string();
+    for suffix in 0..5000 {
         let candidate = if suffix == 0 {
             base.clone()
         } else {
@@ -329,7 +408,7 @@ fn write_note(note: &Note, dir: &Path) -> io::Result<()> {
     fs::write(note_path(dir, &note.id), content)
 }
 
-fn parse_note(path: &Path) -> io::Result<Note> {
+fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
     let raw = fs::read_to_string(path)?;
     let (header, body) = if let Some(idx) = raw.find("\n---\n") {
         let (h, rest) = raw.split_at(idx);
@@ -366,11 +445,12 @@ fn parse_note(path: &Path) -> io::Result<Note> {
         created,
         updated,
         body,
+        size_bytes,
     })
 }
 
 fn short_timestamp() -> String {
-    Local::now().format("%Y%m%d%H%M%S").to_string()
+    Local::now().timestamp_micros().to_string()
 }
 
 fn timestamp_string() -> String {
@@ -382,6 +462,17 @@ fn parse_timestamp(ts: &str) -> Option<DateTime<FixedOffset>> {
     DateTime::parse_from_str(ts, "%m/%d/%Y %I:%M %p %:z").ok()
 }
 
+fn cmp_dt(a: &str, b: &str) -> Ordering {
+    let a_dt = parse_timestamp(a);
+    let b_dt = parse_timestamp(b);
+    match (a_dt, b_dt) {
+        (Some(a), Some(b)) => a.cmp(&b),
+        (Some(_), None) => Ordering::Greater,
+        (None, Some(_)) => Ordering::Less,
+        _ => Ordering::Equal,
+    }
+}
+
 fn has_fzf() -> bool {
     Command::new("fzf")
         .arg("--version")
@@ -391,14 +482,15 @@ fn has_fzf() -> bool {
         .is_ok()
 }
 
-fn list_note_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
+fn list_note_files(dir: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         if entry.file_type()?.is_file()
             && entry.path().extension().and_then(|s| s.to_str()) == Some("md")
         {
-            files.push(entry.path());
+            let size = entry.metadata()?.len();
+            files.push((entry.path(), size));
         }
     }
     Ok(files)
@@ -418,6 +510,48 @@ fn preview_line(note: &Note) -> String {
         text.push('…');
     }
     text
+}
+
+fn generate_body(len: usize, seed: usize) -> String {
+    let base = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin aliquet, mauris nec facilisis rhoncus, nisl justo viverra dui, vitae placerat metus erat sit amet nunc. ";
+    let mut out = String::new();
+    let mut n = 0;
+    while out.len() < len {
+        out.push_str(base);
+        out.push_str(&format!("Seed chunk {seed} idx {n}. "));
+        n += 1;
+    }
+    out.truncate(len);
+    out.push('\n');
+    out
+}
+
+fn launch_editor_popup(editor: &str, path: &Path) -> io::Result<bool> {
+    if !has_fzf() {
+        return Ok(false);
+    }
+    let mut child = Command::new("fzf")
+        .arg("--no-multi")
+        .arg("--height")
+        .arg("70%")
+        .arg("--layout")
+        .arg("reverse")
+        .arg("--border")
+        .arg("--preview")
+        .arg("sed -n '1,160p' {}")
+        .arg("--bind")
+        .arg(format!("enter:execute({} {{}} < /dev/tty)+abort", editor))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin.write_all(path.to_string_lossy().as_bytes())?;
+        stdin.write_all(b"\n")?;
+    }
+    let status = child.wait()?;
+    Ok(status.success())
 }
 
 fn render_markdown(input: &str, use_color: bool) -> String {

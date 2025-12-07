@@ -14,3 +14,6 @@ All notable changes are documented in this file. Version numbers follow semantic
 - Added zsh + fzf completion helper in `contrib/quick_notes_fzf.zsh` with preview support for note selection on `view`/`render`/`edit`.
 - Introduced `qn completion zsh` so `.zshrc` can source completions via `source <(qn completion zsh)`.
 - Added `delete` command with optional fzf multi-select and preview for batch deletions; list output now shows compact previews.
+- Added `seed` command to generate bulk test notes; improved id uniqueness using microsecond timestamps.
+- `list` supports `--sort` (created|updated|size) with `--asc|--desc`.
+- `edit` now uses an fzf popup (70% height) with preview when fzf is available, otherwise falls back to the default editor.
