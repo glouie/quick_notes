@@ -34,4 +34,4 @@ _qn_note_ids() {
   fi
 }
 
-_qn "$@"
+compdef _qn qn quick_notes
