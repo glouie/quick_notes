@@ -208,9 +208,27 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let use_color = env::var("NO_COLOR").is_err();
+    let max_preview = notes
+        .iter()
+        .map(|n| preview_line(n).chars().count())
+        .max()
+        .unwrap_or(0);
+
     for n in notes {
         let preview = preview_line(&n);
-        println!("{}  | {}  | {}", n.id, n.updated, preview);
+        let mut padded_preview = preview.clone();
+        let pad = max_preview.saturating_sub(preview.chars().count());
+        padded_preview.push_str(&" ".repeat(pad));
+        let tags_text = format_tags(&n.tags, use_color);
+        if tags_text.is_empty() {
+            println!("{}  | {}  | {}", n.id, n.updated, padded_preview);
+        } else {
+            println!(
+                "{}  | {}  | {}  {}",
+                n.id, n.updated, padded_preview, tags_text
+            );
+        }
     }
     Ok(())
 }
@@ -733,6 +751,45 @@ fn preview_line(note: &Note) -> String {
         text.push('…');
     }
     text
+}
+
+fn format_tags(tags: &[String], use_color: bool) -> String {
+    if tags.is_empty() {
+        return String::new();
+    }
+    let mut out = Vec::new();
+    for tag in tags {
+        if use_color {
+            let (r, g, b) = color_for_tag(tag);
+            out.push(Paint::rgb(tag.as_str(), r, g, b).bold().to_string());
+        } else {
+            out.push(tag.clone());
+        }
+    }
+    out.join(" ")
+}
+
+fn color_for_tag(tag: &str) -> (u8, u8, u8) {
+    const PALETTE: &[(u8, u8, u8)] = &[
+        (137, 180, 250), // blue
+        (166, 227, 161), // green
+        (249, 226, 175), // yellow
+        (245, 194, 231), // pink
+        (255, 169, 167), // red
+        (148, 226, 213), // teal
+        (198, 160, 246), // purple
+        (240, 198, 198), // rose
+    ];
+    let h = hash_tag(tag);
+    PALETTE[(h as usize) % PALETTE.len()]
+}
+
+fn hash_tag(tag: &str) -> u64 {
+    let mut h: u64 = 5381;
+    for b in tag.bytes() {
+        h = (h.wrapping_shl(5)).wrapping_add(h) ^ u64::from(b);
+    }
+    h
 }
 
 fn split_tags(args: Vec<String>) -> (Vec<String>, Vec<String>) {
