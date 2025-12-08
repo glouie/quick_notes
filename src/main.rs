@@ -863,6 +863,11 @@ fn launch_editor_popup(editor: &str, path: &Path) -> io::Result<bool> {
     if !has_fzf() {
         return Ok(false);
     }
+    let path_str = path.to_string_lossy().to_string();
+    let bind = format!(
+        "enter:execute({} {{+}} </dev/tty >/dev/tty 2>/dev/null)+abort",
+        editor
+    );
     let mut child = Command::new("fzf")
         .arg("--no-multi")
         .arg("--height")
@@ -873,14 +878,14 @@ fn launch_editor_popup(editor: &str, path: &Path) -> io::Result<bool> {
         .arg("--preview")
         .arg("quick_notes render $(basename {} .md) 2>/dev/null || sed -n '1,160p' {}")
         .arg("--bind")
-        .arg(format!("enter:execute({} {{}} < /dev/tty)+abort", editor))
+        .arg(bind)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()?;
 
     if let Some(stdin) = child.stdin.as_mut() {
-        stdin.write_all(path.to_string_lossy().as_bytes())?;
+        stdin.write_all(path_str.as_bytes())?;
         stdin.write_all(b"\n")?;
     }
     let status = child.wait()?;
