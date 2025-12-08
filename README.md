@@ -21,7 +21,7 @@ Usage
 - `qn edit <id> [-t tag]` — opens in `$EDITOR` (falls back to `vi`); if `fzf` is installed, it uses a 70% height popup with a preview before editing, then refreshes the Updated timestamp. Optional tag guard.
 - `qn delete <id> [more ids...] [-t tag]` — delete one or more notes; use `--fzf` or call with no ids (and fzf installed) to pick multiple notes in an interactive preview list; optional tag guard for safety.
 - `qn delete-all` — delete every note in the notes directory.
-- `qn seed <count> [--chars N]` — generate test notes (for load/perf checks) with random content of N characters (default 400).
+- `qn seed <count> [--chars N] [-t tag]` — generate test notes (for load/perf checks) with random content of N characters (default 400) and optional tags.
 - `qn tags` — list tags with counts plus first/last usage (pinned tags stay visible even if unused).
 - `qn path` — print the notes directory.
 - `qn completion zsh` — print the zsh completion script (fzf-powered note id selection with preview).

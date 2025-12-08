@@ -17,7 +17,7 @@ Key Commands
 - `qn delete <ids...> [--fzf] [-t tag]` — delete notes; interactive multi-select if `fzf` is present and no ids provided; optional tag guard.
 - `qn delete-all` — remove every note.
 - `qn tags` — list tags with counts and first/last usage; pinned tags stay visible even if unused.
-- `qn seed <count> [--chars N]` — generate bulk test notes (microsecond ids, random bodies).
+- `qn seed <count> [--chars N] [-t tag]` — generate bulk test notes (microsecond ids, random bodies) with optional tags.
 - `qn completion zsh` — emits zsh/fzf completion script (includes delete multi-select).
 - `qn path` — show the notes directory (`~/.quick_notes` by default).
 
