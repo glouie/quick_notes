@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "edit" => edit_note(args, &dir)?,
         "delete" => delete_notes(args, &dir)?,
         "seed" => seed_notes(args, &dir)?,
+        "delete-all" => delete_all_notes(&dir)?,
         "path" => println!("{}", dir.display()),
         "completion" => print_completion(args)?,
         "help" => print_help(),
@@ -64,6 +65,7 @@ Usage:
   qn render <id>                  Same as: qn view <id> --render
   qn edit <id>                    Edit in $EDITOR (updates timestamp)
   qn delete [ids...] [--fzf]      Delete one or more notes (fzf multi-select when --fzf or no ids and fzf available)
+  qn delete-all                   Delete every note in the notes directory
   qn seed <count> [--chars N]     Generate test notes (random body of N chars; default 400)
   qn path                         Show the notes directory
   qn completion zsh               Print zsh completion script for fzf-powered ids
@@ -327,6 +329,19 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if deleted == 0 {
         println!("No notes deleted.");
     }
+    Ok(())
+}
+
+fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
+    let files = list_note_files(dir)?;
+    if files.is_empty() {
+        println!("No notes to delete.");
+        return Ok(());
+    }
+    for (path, _) in files {
+        fs::remove_file(&path)?;
+    }
+    println!("Deleted all notes.");
     Ok(())
 }
 
