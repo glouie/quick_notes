@@ -32,7 +32,7 @@ _qn_note_ids() {
     return 0
   fi
 
-  local fzf_opts="--preview 'sed -n \"1,80p\" {}' --preview-window=down:70%"
+  local fzf_opts="--preview 'quick_notes render ${dir:+}$(basename {} .md) 2>/dev/null || sed -n \"1,120p\" {}' --preview-window=down:70%"
   if [[ ${words[2]} == delete ]]; then
     fzf_opts="$fzf_opts --multi"
   fi

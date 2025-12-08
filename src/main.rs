@@ -868,7 +868,7 @@ fn launch_editor_popup(editor: &str, path: &Path) -> io::Result<bool> {
         .arg("reverse")
         .arg("--border")
         .arg("--preview")
-        .arg("sed -n '1,160p' {}")
+        .arg("quick_notes render $(basename {} .md) 2>/dev/null || sed -n '1,160p' {}")
         .arg("--bind")
         .arg(format!("enter:execute({} {{}} < /dev/tty)+abort", editor))
         .stdin(Stdio::piped())
