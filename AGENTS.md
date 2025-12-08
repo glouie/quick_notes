@@ -8,13 +8,15 @@ Quick Notes is a fast, UTF-8 Rust CLI for capturing Markdown notes with creation
 Key Commands
 ------------
 - Binary name is `quick_notes`; users often add `alias qn=quick_notes`. Completions support both `qn` and `quick_notes`.
-- `qn add "text"` — quick add with generated title and timestamp-based id.
-- `qn new <title> [body...]` — add with explicit title.
-- `qn list [--sort created|updated|size] [--asc|--desc]` — list notes with compact previews.
-- `qn view <id> [--render|-r] [--plain]` — show raw or rendered Markdown.
+- `qn add "text" [-t tag...]` — quick add with generated title and timestamp-based id (tags normalized to `#tag` form).
+- `qn new <title> [body...] [-t tag...]` — add with explicit title and optional tags.
+- `qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag]` — list notes with compact previews; search across title/body; filter by tag.
+- `qn view <id> [--render|-r] [--plain] [-t tag]` — show raw or rendered Markdown; optional tag guard.
 - `qn render <id>` — shortcut to rendered view.
-- `qn edit <id>` — edit in `$EDITOR`; if `fzf` exists, uses a ~70% popup with preview.
-- `qn delete <ids...> [--fzf]` — delete notes; interactive multi-select if `fzf` is present and no ids provided.
+- `qn edit <id> [-t tag]` — edit in `$EDITOR`; if `fzf` exists, uses a ~70% popup with preview; optional tag guard.
+- `qn delete <ids...> [--fzf] [-t tag]` — delete notes; interactive multi-select if `fzf` is present and no ids provided; optional tag guard.
+- `qn delete-all` — remove every note.
+- `qn tags` — list tags with counts and first/last usage; pinned tags stay visible even if unused.
 - `qn seed <count> [--chars N]` — generate bulk test notes (microsecond ids, random bodies).
 - `qn completion zsh` — emits zsh/fzf completion script (includes delete multi-select).
 - `qn path` — show the notes directory (`~/.quick_notes` by default).
@@ -38,6 +40,8 @@ Important Behaviors
 - Render: uses pulldown-cmark; `--plain` or `NO_COLOR` disables color.
 - Completion: zsh script provides fzf previews for view/render/edit/delete; delete allows multi-select via Tab in fzf.
 - Popup edit: fzf-based preview/70% height; falls back to `$EDITOR` normally.
+- Tags: normalized to `#tag`; stored in `Tags:` header. Tag filters work on list/view/edit/delete. Pinned tags (default `#todo,#meeting,#scratch`, override via `QUICK_NOTES_PINNED_TAGS`) remain visible in `qn tags` even if unused.
+- Search: `list -s/--search` matches substring in title/body (case-insensitive).
 
 Common Fix/Assist Tips
 ----------------------

@@ -18,3 +18,5 @@ All notable changes are documented in this file. Version numbers follow semantic
 - `list` supports `--sort` (created|updated|size) with `--asc|--desc`.
 - `edit` now uses an fzf popup (70% height) with preview when fzf is available, otherwise falls back to the default editor.
 - Added `delete-all` to remove every note in the current notes directory.
+- Tags: notes now carry `Tags:` metadata; add via `-t/--tag`, filter list/view/edit/delete by tag, and list tag stats via `qn tags` (pinned tags default to `#todo,#meeting,#scratch`, overridable with `QUICK_NOTES_PINNED_TAGS`).
+- Search: `list -s/--search` filters by substring in title/body (case-insensitive).

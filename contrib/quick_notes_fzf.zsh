@@ -6,7 +6,7 @@
 _qn() {
   local state
   _arguments -C \
-    '1:command:(add new list view render edit delete seed path help completion)' \
+    '1:command:(add new list view render edit delete delete-all seed tags path help completion)' \
     '2:note id:_qn_note_ids' \
     '*::text:->text'
 }

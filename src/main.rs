@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use yansi::Paint;
 
+const PINNED_TAGS_DEFAULT: &str = "#todo,#meeting,#scratch";
+
 #[derive(Debug, Clone)]
 struct Note {
     id: String,
@@ -16,6 +18,7 @@ struct Note {
     created: String,
     updated: String,
     body: String,
+    tags: Vec<String>,
     size_bytes: u64,
 }
 
@@ -40,6 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "delete" => delete_notes(args, &dir)?,
         "seed" => seed_notes(args, &dir)?,
         "delete-all" => delete_all_notes(&dir)?,
+        "tags" => list_tags(&dir)?,
         "path" => println!("{}", dir.display()),
         "completion" => print_completion(args)?,
         "help" => print_help(),
@@ -59,13 +63,16 @@ Quick Notes CLI
 Usage:
   qn add \"note text\"              Quick add with generated title
   qn new <title> [body...]        New note with title and optional body
-  qn list                         List notes
+  qn list [--sort <field>] [--asc|--desc] [-s|--search <text>] [-t|--tag <tag>]
+                                  List notes (sort by created|updated|size; default updated desc)
   qn view <id> [--render|-r] [--plain]
                                   Show a note (render markdown with --render; disable color with --plain)
   qn render <id>                  Same as: qn view <id> --render
-  qn edit <id>                    Edit in $EDITOR (updates timestamp)
-  qn delete [ids...] [--fzf]      Delete one or more notes (fzf multi-select when --fzf or no ids and fzf available)
+  qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires tag match when provided)
+  qn delete [ids...] [--fzf] [-t|--tag <tag>]
+                                  Delete one or more notes (fzf multi-select when --fzf or no ids and fzf available; optional tag filter)
   qn delete-all                   Delete every note in the notes directory
+  qn tags                         List tags with counts and first/last use
   qn seed <count> [--chars N]     Generate test notes (random body of N chars; default 400)
   qn path                         Show the notes directory
   qn completion zsh               Print zsh completion script for fzf-powered ids
@@ -101,9 +108,13 @@ fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
         return Err("Provide the note body, e.g. `qn add \"text\"`".into());
     }
-    let body = args.join(" ");
+    let (tags, body_parts) = split_tags(args);
+    if body_parts.is_empty() {
+        return Err("Provide the note body after tags, e.g. `qn add \"text\" -t #tag`".into());
+    }
+    let body = body_parts.join(" ");
     let title = format!("Quick note {}", short_timestamp());
-    let note = create_note(title, body, dir)?;
+    let note = create_note_with_tags(title, body, tags, dir)?;
     println!("Added note {} ({})", note.id, note.title);
     Ok(())
 }
@@ -113,12 +124,9 @@ fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Err("Usage: qn new <title> [body]".into());
     }
     let title = args[0].clone();
-    let body = if args.len() > 1 {
-        args[1..].join(" ")
-    } else {
-        String::new()
-    };
-    let note = create_note(title, body, dir)?;
+    let (tags, body_parts) = split_tags(args.into_iter().skip(1).collect());
+    let body = body_parts.join(" ");
+    let note = create_note_with_tags(title, body, tags, dir)?;
     println!("Created note {} ({})", note.id, note.title);
     Ok(())
 }
@@ -126,6 +134,8 @@ fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut sort_field = "updated".to_string();
     let mut ascending = false;
+    let mut search: Option<String> = None;
+    let mut tag_filters: Vec<String> = Vec::new();
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -138,6 +148,23 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             }
             "--asc" => ascending = true,
             "--desc" => ascending = false,
+            "-s" | "--search" => {
+                if let Some(v) = iter.next() {
+                    search = Some(v);
+                } else {
+                    return Err("Provide a search string after -s/--search".into());
+                }
+            }
+            "-t" | "--tag" => {
+                if let Some(v) = iter.next() {
+                    let tag = normalize_tag(&v);
+                    if !tag.is_empty() {
+                        tag_filters.push(tag);
+                    }
+                } else {
+                    return Err("Provide a tag after -t/--tag".into());
+                }
+            }
             other => {
                 return Err(format!("Unknown flag for list: {other}").into());
             }
@@ -149,6 +176,17 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         if let Ok(note) = parse_note(&path, size) {
             notes.push(note);
         }
+    }
+
+    if let Some(q) = &search {
+        let ql = q.to_lowercase();
+        notes.retain(|n| {
+            n.title.to_lowercase().contains(&ql) || n.body.to_lowercase().contains(&ql)
+        });
+    }
+
+    if !tag_filters.is_empty() {
+        notes.retain(|n| note_has_tags(n, &tag_filters));
     }
 
     let comparator = |a: &Note, b: &Note| -> std::cmp::Ordering {
@@ -189,21 +227,40 @@ fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
 }
 
 fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Box<dyn Error>> {
-    let id = args
-        .get(0)
-        .ok_or("Usage: qn view <id> [--render|-r] [--plain]")?;
-    let render = force_render
-        || args
-            .iter()
-            .any(|a| a == "--render" || a == "-r" || a == "render");
-    let plain = args.iter().any(|a| a == "--plain");
+    let mut args_iter = args.into_iter();
+    let id = args_iter
+        .next()
+        .ok_or("Usage: qn view <id> [--render|-r] [--plain] [-t <tag>]")?;
+    let mut render = force_render;
+    let mut plain = false;
+    let mut tag_filters: Vec<String> = Vec::new();
+    while let Some(arg) = args_iter.next() {
+        match arg.as_str() {
+            "--render" | "-r" | "render" => render = true,
+            "--plain" => plain = true,
+            "-t" | "--tag" => {
+                if let Some(v) = args_iter.next() {
+                    let tag = normalize_tag(&v);
+                    if !tag.is_empty() {
+                        tag_filters.push(tag);
+                    }
+                } else {
+                    return Err("Provide a tag after -t/--tag".into());
+                }
+            }
+            other => return Err(format!("Unknown flag for view: {other}").into()),
+        }
+    }
     let use_color = !plain && env::var("NO_COLOR").is_err();
-    let path = note_path(dir, id);
+    let path = note_path(dir, &id);
     if !path.exists() {
         return Err(format!("Note {id} not found").into());
     }
     let size = fs::metadata(&path)?.len();
     let note = parse_note(&path, size)?;
+    if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
+        return Err(format!("Note {id} does not have required tag(s)").into());
+    }
     if render {
         let rendered = render_markdown(&note.body, use_color);
         println!(
@@ -220,8 +277,25 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
 }
 
 fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
-    let id = args.get(0).ok_or("Usage: qn edit <id>")?;
-    let path = note_path(dir, id);
+    let mut args_iter = args.into_iter();
+    let id = args_iter.next().ok_or("Usage: qn edit <id> [-t <tag>]")?;
+    let mut tag_filters: Vec<String> = Vec::new();
+    while let Some(arg) = args_iter.next() {
+        match arg.as_str() {
+            "-t" | "--tag" => {
+                if let Some(v) = args_iter.next() {
+                    let tag = normalize_tag(&v);
+                    if !tag.is_empty() {
+                        tag_filters.push(tag);
+                    }
+                } else {
+                    return Err("Provide a tag after -t/--tag".into());
+                }
+            }
+            other => return Err(format!("Unknown flag for edit: {other}").into()),
+        }
+    }
+    let path = note_path(dir, &id);
     if !path.exists() {
         return Err(format!("Note {id} not found").into());
     }
@@ -250,6 +324,9 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let size = fs::metadata(&path)?.len();
     let mut note = parse_note(&path, size)?;
+    if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
+        return Err(format!("Note {id} does not have required tag(s)").into());
+    }
     note.updated = timestamp_string();
     write_note(&note, dir)?;
     println!("Updated {}", note.id);
@@ -259,9 +336,20 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut use_fzf = false;
     let mut ids: Vec<String> = Vec::new();
-    for a in args {
+    let mut tag_filters: Vec<String> = Vec::new();
+    let mut iter = args.into_iter();
+    while let Some(a) = iter.next() {
         if a == "--fzf" {
             use_fzf = true;
+        } else if a == "-t" || a == "--tag" {
+            if let Some(v) = iter.next() {
+                let tag = normalize_tag(&v);
+                if !tag.is_empty() {
+                    tag_filters.push(tag);
+                }
+            } else {
+                return Err("Provide a tag after -t/--tag".into());
+            }
         } else {
             ids.push(a);
         }
@@ -271,7 +359,16 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         if !use_fzf && !has_fzf() {
             return Err("Provide ids or install fzf / use --fzf for interactive delete".into());
         }
-        let files = list_note_files(dir)?;
+        let mut files = list_note_files(dir)?;
+        if !tag_filters.is_empty() {
+            files.retain(|(p, size)| {
+                if let Ok(note) = parse_note(p, *size) {
+                    note_has_tags(&note, &tag_filters)
+                } else {
+                    false
+                }
+            });
+        }
         if files.is_empty() {
             println!("No notes to delete.");
             return Ok(());
@@ -319,6 +416,15 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     for id in ids {
         let path = note_path(dir, &id);
         if path.exists() {
+            if !tag_filters.is_empty() {
+                let size = fs::metadata(&path)?.len();
+                if let Ok(note) = parse_note(&path, size) {
+                    if !note_has_tags(&note, &tag_filters) {
+                        println!("Skipped {id} (missing tag filter)");
+                        continue;
+                    }
+                }
+            }
             fs::remove_file(&path)?;
             println!("Deleted {id}");
             deleted += 1;
@@ -345,6 +451,72 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
+    let pinned =
+        env::var("QUICK_NOTES_PINNED_TAGS").unwrap_or_else(|_| PINNED_TAGS_DEFAULT.to_string());
+    let pinned_tags: Vec<String> = pinned
+        .split(',')
+        .map(|t| normalize_tag(t.trim()))
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    #[derive(Default, Clone)]
+    struct TagStat {
+        count: usize,
+        first: Option<DateTime<FixedOffset>>,
+        last: Option<DateTime<FixedOffset>>,
+    }
+
+    let mut stats: std::collections::BTreeMap<String, TagStat> = std::collections::BTreeMap::new();
+    for (path, size) in list_note_files(dir)? {
+        if let Ok(note) = parse_note(&path, size) {
+            let created = parse_timestamp(&note.created);
+            let updated = parse_timestamp(&note.updated);
+            for tag in note.tags {
+                let entry = stats.entry(tag).or_default();
+                entry.count += 1;
+                if let Some(c) = created {
+                    entry.first = match entry.first {
+                        Some(f) => Some(f.min(c)),
+                        None => Some(c),
+                    };
+                }
+                if let Some(u) = updated {
+                    entry.last = match entry.last {
+                        Some(l) => Some(l.max(u)),
+                        None => Some(u),
+                    };
+                }
+            }
+        }
+    }
+
+    for tag in pinned_tags {
+        stats.entry(tag).or_insert(TagStat::default());
+    }
+
+    if stats.is_empty() {
+        println!("No tags found.");
+        return Ok(());
+    }
+
+    for (tag, stat) in stats {
+        let first = stat
+            .first
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_else(|| "n/a".to_string());
+        let last = stat
+            .last
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_else(|| "n/a".to_string());
+        println!(
+            "{:15} | count {:4} | first {} | last {}",
+            tag, stat.count, first, last
+        );
+    }
+    Ok(())
+}
+
 fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
         return Err("Usage: qn seed <count> [--chars N]".into());
@@ -367,7 +539,7 @@ fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     for i in 0..count {
         let title = format!("Seed note {}", short_timestamp());
         let body = generate_body(body_len, i);
-        let note = create_note(title, body, dir)?;
+        let note = create_note(title, body, Vec::new(), dir)?;
         if (i + 1) % 50 == 0 || i + 1 == count {
             println!("Generated {}/{} (last id {})", i + 1, count, note.id);
         }
@@ -375,7 +547,29 @@ fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn create_note(title: String, body: String, dir: &Path) -> Result<Note, Box<dyn Error>> {
+fn create_note_with_tags(
+    title: String,
+    body: String,
+    tags: Vec<String>,
+    dir: &Path,
+) -> Result<Note, Box<dyn Error>> {
+    create_note(title, body, tags, dir)
+}
+
+fn create_note(
+    title: String,
+    body: String,
+    tags: Vec<String>,
+    dir: &Path,
+) -> Result<Note, Box<dyn Error>> {
+    let mut tags: Vec<String> = tags
+        .into_iter()
+        .map(|t| normalize_tag(&t))
+        .filter(|t| !t.is_empty())
+        .collect();
+    tags.sort();
+    tags.dedup();
+
     let id = unique_id(dir)?;
     let now = timestamp_string();
     let mut note = Note {
@@ -384,6 +578,7 @@ fn create_note(title: String, body: String, dir: &Path) -> Result<Note, Box<dyn 
         created: now.clone(),
         updated: now,
         body,
+        tags,
         size_bytes: 0,
     };
     write_note(&note, dir)?;
@@ -416,9 +611,14 @@ fn unique_id(dir: &Path) -> io::Result<String> {
 fn write_note(note: &Note, dir: &Path) -> io::Result<()> {
     let mut body = note.body.trim_end_matches('\n').to_string();
     body.push('\n');
+    let tags_line = if note.tags.is_empty() {
+        "Tags:".to_string()
+    } else {
+        format!("Tags: {}", note.tags.join(", "))
+    };
     let content = format!(
-        "Title: {}\nCreated: {}\nUpdated: {}\n---\n{}",
-        note.title, note.created, note.updated, body
+        "Title: {}\nCreated: {}\nUpdated: {}\n{}\n---\n{}",
+        note.title, note.created, note.updated, tags_line, body
     );
     fs::write(note_path(dir, &note.id), content)
 }
@@ -439,6 +639,7 @@ fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
         .to_string();
     let mut created = "unknown".to_string();
     let mut updated = "unknown".to_string();
+    let mut tags: Vec<String> = Vec::new();
 
     for line in header.lines() {
         if let Some(val) = line.strip_prefix("Title:") {
@@ -447,6 +648,12 @@ fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
             created = val.trim().to_string();
         } else if let Some(val) = line.strip_prefix("Updated:") {
             updated = val.trim().to_string();
+        } else if let Some(val) = line.strip_prefix("Tags:") {
+            tags = val
+                .split(',')
+                .map(|t| normalize_tag(t.trim()))
+                .filter(|t| !t.is_empty())
+                .collect();
         }
     }
 
@@ -460,6 +667,7 @@ fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
         created,
         updated,
         body,
+        tags,
         size_bytes,
     })
 }
@@ -525,6 +733,42 @@ fn preview_line(note: &Note) -> String {
         text.push('…');
     }
     text
+}
+
+fn split_tags(args: Vec<String>) -> (Vec<String>, Vec<String>) {
+    let mut tags = Vec::new();
+    let mut rest = Vec::new();
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "-t" | "--tag" => {
+                if let Some(v) = iter.next() {
+                    let tag = normalize_tag(&v);
+                    if !tag.is_empty() {
+                        tags.push(tag);
+                    }
+                }
+            }
+            _ => rest.push(arg),
+        }
+    }
+    (tags, rest)
+}
+
+fn normalize_tag(t: &str) -> String {
+    let trimmed = t.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with('#') {
+        trimmed.to_string()
+    } else {
+        format!("#{}", trimmed)
+    }
+}
+
+fn note_has_tags(note: &Note, tags: &[String]) -> bool {
+    tags.iter().all(|t| note.tags.contains(t))
 }
 
 fn generate_body(len: usize, seed: usize) -> String {
