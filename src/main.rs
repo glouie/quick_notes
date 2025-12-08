@@ -727,6 +727,9 @@ fn cmp_dt(a: &str, b: &str) -> Ordering {
 }
 
 fn has_fzf() -> bool {
+    if env::var("QUICK_NOTES_NO_FZF").is_ok() {
+        return false;
+    }
     Command::new("fzf")
         .arg("--version")
         .stdout(Stdio::null())
