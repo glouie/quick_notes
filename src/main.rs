@@ -738,13 +738,15 @@ fn list_note_files(dir: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
 }
 
 fn preview_line(note: &Note) -> String {
-    let mut text = format!(
-        "{} {}",
-        note.title.trim(),
-        note.body.lines().next().unwrap_or("").trim()
-    )
-    .trim()
-    .to_string();
+    let first_line = note.body.lines().next().unwrap_or("").trim();
+    let title = note.title.trim();
+    // Suppress default auto-generated titles like "Quick note <id>" in the preview.
+    let include_title = !title.to_lowercase().starts_with("quick note ");
+    let mut text = if include_title {
+        format!("{} {}", title, first_line).trim().to_string()
+    } else {
+        first_line.to_string()
+    };
     const MAX_LEN: usize = 100;
     if text.chars().count() > MAX_LEN {
         text = text.chars().take(MAX_LEN).collect::<String>();
