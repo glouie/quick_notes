@@ -319,25 +319,14 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     let editor = env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
-    let mut used_popup = false;
-    if has_fzf() {
-        used_popup = launch_editor_popup(&editor, &path)?;
-        // If popup was canceled, skip updating timestamp.
-        if !used_popup {
-            println!("Edit canceled.");
-            return Ok(());
-        }
-    }
-    if !used_popup {
-        let status = Command::new(&editor)
-            .arg(&path)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()?;
-        if !status.success() {
-            return Err("Editor exited with non-zero status".into());
-        }
+    let status = Command::new(&editor)
+        .arg(&path)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    if !status.success() {
+        return Err("Editor exited with non-zero status".into());
     }
 
     let size = fs::metadata(&path)?.len();
@@ -868,39 +857,6 @@ fn generate_body(len: usize, seed: usize) -> String {
     out.truncate(len);
     out.push('\n');
     out
-}
-
-fn launch_editor_popup(editor: &str, path: &Path) -> io::Result<bool> {
-    if !has_fzf() {
-        return Ok(false);
-    }
-    let path_str = path.to_string_lossy().to_string();
-    let bind = format!(
-        "enter:execute({} {{+}} </dev/tty >/dev/tty 2>/dev/null)+abort",
-        editor
-    );
-    let mut child = Command::new("fzf")
-        .arg("--no-multi")
-        .arg("--height")
-        .arg("70%")
-        .arg("--layout")
-        .arg("reverse")
-        .arg("--border")
-        .arg("--preview")
-        .arg("quick_notes render $(basename {} .md) 2>/dev/null || sed -n '1,160p' {}")
-        .arg("--bind")
-        .arg(bind)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
-
-    if let Some(stdin) = child.stdin.as_mut() {
-        stdin.write_all(path_str.as_bytes())?;
-        stdin.write_all(b"\n")?;
-    }
-    let status = child.wait()?;
-    Ok(status.success())
 }
 
 fn render_markdown(input: &str, use_color: bool) -> String {
