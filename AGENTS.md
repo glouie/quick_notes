@@ -35,7 +35,7 @@ Storage & Format
 
 Important Behaviors
 -------------------
-- IDs: microsecond-based timestamps, suffixed if a collision occurs.
+- IDs: microsecond-based timestamps, suffixed if a collision occurs. `list` shows the id (dark gray) and timestamp (blue) followed by the preview; note content stays uncolored; tags are colored per tag hash.
 - Sorting: `list` defaults to updated desc; can sort by created/updated/size asc/desc.
 - Render: uses pulldown-cmark; `--plain` or `NO_COLOR` disables color.
 - Completion: zsh script provides fzf previews for view/render/edit/delete; delete allows multi-select via Tab in fzf.

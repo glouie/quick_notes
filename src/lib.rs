@@ -209,25 +209,17 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     let use_color = env::var("NO_COLOR").is_err();
-    let max_preview = notes
-        .iter()
-        .map(|n| preview_line(n).chars().count())
-        .max()
-        .unwrap_or(0);
 
     for n in notes {
         let preview = preview_line(&n);
-        let mut padded_preview = preview.clone();
-        let pad = max_preview.saturating_sub(preview.chars().count());
-        padded_preview.push_str(&" ".repeat(pad));
+        let id_text = format_id(&n.id, use_color);
+        let ts_text = format_timestamp(&n.updated, use_color);
         let tags_text = format_tags(&n.tags, use_color);
+
         if tags_text.is_empty() {
-            println!("{}  | {}  | {}", n.id, n.updated, padded_preview);
+            println!("{} {} {}", id_text, ts_text, preview);
         } else {
-            println!(
-                "{}  | {}  | {}  {}",
-                n.id, n.updated, padded_preview, tags_text
-            );
+            println!("{} {} {} {}", id_text, ts_text, preview, tags_text);
         }
     }
     Ok(())
@@ -807,6 +799,22 @@ fn hash_tag(tag: &str) -> u64 {
         h = (h.wrapping_shl(5)).wrapping_add(h) ^ u64::from(b);
     }
     h
+}
+
+fn format_id(id: &str, use_color: bool) -> String {
+    if use_color {
+        Paint::rgb(id, 108, 112, 134).to_string()
+    } else {
+        id.to_string()
+    }
+}
+
+fn format_timestamp(ts: &str, use_color: bool) -> String {
+    if use_color {
+        Paint::rgb(ts, 137, 180, 250).to_string()
+    } else {
+        ts.to_string()
+    }
 }
 
 fn split_tags(args: Vec<String>) -> (Vec<String>, Vec<String>) {
