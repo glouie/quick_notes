@@ -6,8 +6,8 @@ A tiny Rust CLI to capture UTF-8 Markdown notes quickly from the terminal. Notes
 Install
 -------
 
-- Build locally: `cargo install --path .`
-- Optional convenience alias after install: `alias qn=quick_notes`
+- Build locally: `cargo install --path .` (installs both `quick_notes` and `qn` binaries).
+- Optional convenience alias after install: `alias qn=quick_notes` (not required if you use the `qn` binary).
 - Default storage path: `~/.quick_notes` (override with `QUICK_NOTES_DIR=/path/to/notes`). The directory is created on first use.
 
 Usage
@@ -21,7 +21,7 @@ Usage
 - `qn edit <id> [-t tag]` — opens in `$EDITOR` (falls back to `vi`); if `fzf` is installed, it uses a 70% height popup with a preview before editing, then refreshes the Updated timestamp. Optional tag guard.
 - `qn delete <id> [more ids...] [-t tag]` — delete one or more notes; use `--fzf` or call with no ids (and fzf installed) to pick multiple notes in an interactive preview list; optional tag guard for safety.
 - `qn delete-all` — delete every note in the notes directory.
-- `qn seed <count> [--chars N] [-t tag] [--markdown]` — generate test notes (for load/perf checks) with random content of N characters (default 400) and optional tags; `--markdown` seeds rich Markdown samples.
+- `qn seed <count> [--chars N] [-t tag] [--markdown]` — generate test notes (for load/perf checks) with random content of N characters (default 400) and optional tags; `--markdown` seeds rich Markdown samples. Argument order is flexible (e.g., `qn seed --markdown 3`).
 - `qn tags` — list tags with counts plus first/last usage (pinned tags stay visible even if unused).
 - `qn path` — print the notes directory.
 - `qn completion zsh` — print the zsh completion script (fzf-powered note id selection with preview).
@@ -42,6 +42,11 @@ Versioning
 ----------
 
 Releases are tracked in `CHANGELOG.md`. Update the changelog with every user-visible change before tagging a new version.
+
+Tests
+-----
+
+- Run `cargo fmt` and `cargo test` before committing changes.
 
 Tips
 ----
