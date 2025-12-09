@@ -21,3 +21,4 @@ All notable changes are documented in this file. Version numbers follow semantic
 - Tags: notes now carry `Tags:` metadata; add via `-t/--tag`, filter list/view/edit/delete by tag, and list tag stats via `qn tags` (pinned tags default to `#todo,#meeting,#scratch`, overridable with `QUICK_NOTES_PINNED_TAGS`).
 - Search: `list -s/--search` filters by substring in title/body (case-insensitive).
 - `seed` supports the same tagging flags as `add` (`-t/--tag`).
+- `seed --markdown` generates notes with Markdown sample content to test rendering.

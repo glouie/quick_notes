@@ -398,6 +398,31 @@ fn seed_with_tags_and_list_sort() {
 }
 
 #[test]
+fn seed_with_markdown_samples() {
+    let temp = TempDir::new().unwrap();
+    cmd(&temp)
+        .args(["seed", "1", "--markdown", "-t", "md"])
+        .assert()
+        .success();
+    let list_out = cmd(&temp)
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let id = String::from_utf8_lossy(&list_out)
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string();
+    let note = read_note(temp.path(), &id);
+    assert!(note.contains("# Heading"));
+    assert!(note.contains("```rust"));
+    assert!(note.contains("- bullet"));
+}
+
+#[test]
 fn tags_command_shows_pinned_and_counts() {
     let temp = TempDir::new().unwrap();
     cmd(&temp)

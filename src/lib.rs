@@ -518,11 +518,12 @@ fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
 
 fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
-        return Err("Usage: qn seed <count> [--chars N] [-t <tag> ...]".into());
+        return Err("Usage: qn seed <count> [--chars N] [-t <tag> ...] [--markdown]".into());
     }
     let count: usize = args[0].parse().map_err(|_| "Count must be a number")?;
     let mut body_len: usize = 400;
     let mut tags: Vec<String> = Vec::new();
+    let mut markdown = false;
     let mut iter = args.into_iter().skip(1);
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -543,13 +544,20 @@ fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                     return Err("Provide a value after -t/--tag".into());
                 }
             }
+            "--markdown" => {
+                markdown = true;
+            }
             other => return Err(format!("Unknown flag for seed: {other}").into()),
         }
     }
 
     for i in 0..count {
         let title = format!("Seed note {}", short_timestamp());
-        let body = generate_body(body_len, i);
+        let body = if markdown {
+            generate_markdown_body(i)
+        } else {
+            generate_body(body_len, i)
+        };
         let note = create_note(title, body, tags.clone(), dir)?;
         if (i + 1) % 50 == 0 || i + 1 == count {
             println!("Generated {}/{} (last id {})", i + 1, count, note.id);
@@ -889,6 +897,20 @@ fn generate_body(len: usize, seed: usize) -> String {
     out.truncate(len);
     out.push('\n');
     out
+}
+
+fn generate_markdown_body(seed: usize) -> String {
+    format!(
+        "# Heading {seed}\n\n\
+        ## Subheading\n\n\
+        - bullet one\n- bullet two\n- bullet three\n\n\
+        1. ordered one\n2. ordered two\n\n\
+        **bold text** and _italic text_ with `inline code`.\n\n\
+        ```rust\nfn example_{seed}() {{ println!(\"hello\"); }}\n```\n\n\
+        > Blockquote example {seed}\n\n\
+        Horizontal rule:\n---\n\n\
+        Link: [example](https://example.com)\n"
+    )
 }
 
 fn render_markdown(input: &str, use_color: bool) -> String {
