@@ -53,5 +53,5 @@ Developing new features
 
 Testing
 -------
-- Run `cargo fmt` and `cargo check` before sending changes.
+- Run `cargo fmt` and `cargo test` before sending or committing changes.
 - For behavior changes, add lightweight integration checks (e.g., create a temp notes dir and run the commands via `cargo run -- ...`) to confirm end-to-end flows.

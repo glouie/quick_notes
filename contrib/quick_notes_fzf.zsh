@@ -26,9 +26,28 @@ _qn_note_ids() {
     return 1
   fi
 
+  local cur_prefix=${words[CURRENT]}
+  local -a stems
+  stems=(${files:t:r})
+
+  if [[ -n $cur_prefix ]]; then
+    local -a matches
+    matches=(${(M)stems:#${~cur_prefix}*})
+    if (( ${#matches} == 1 )); then
+      compadd -- $matches
+      return 0
+    fi
+  fi
+
   # If fzf is missing, fall back to plain completion.
   if ! command -v fzf >/dev/null 2>&1; then
-    compadd -- ${files:t:r}
+    if [[ -n $cur_prefix ]]; then
+      local -a matches
+      matches=(${(M)stems:#${~cur_prefix}*})
+      compadd -- $matches
+    else
+      compadd -- $stems
+    fi
     return 0
   fi
 
@@ -38,8 +57,16 @@ _qn_note_ids() {
   fi
 
   local selection
-  selection=$(printf '%s\n' "${files[@]}" | FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} ${fzf_opts}" fzf 2>/dev/null || true)
+  selection=$(printf '%s\n' "${files[@]}" | FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} ${fzf_opts}" fzf --query "${cur_prefix}" 2>/dev/null || true)
   if [[ -z $selection ]]; then
+    if [[ -n $cur_prefix ]]; then
+      local -a matches
+      matches=(${(M)stems:#${~cur_prefix}*})
+      if (( ${#matches} == 1 )); then
+        compadd -- $matches
+        return 0
+      fi
+    }
     return 1
   fi
   compadd -- ${(f)${selection:t:r}}

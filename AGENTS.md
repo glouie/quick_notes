@@ -49,3 +49,4 @@ Common Fix/Assist Tips
 - Notes not found: check `QUICK_NOTES_DIR`; run `qn path`.
 - Encoding issues: ensure UTF-8 editor; files are plain UTF-8 Markdown.
 - Large datasets: use `qn seed <N>` to create load; `qn list --sort size --desc` for inspection.
+- Always run `cargo fmt` and `cargo test` before committing changes.

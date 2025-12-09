@@ -238,9 +238,7 @@ fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
 
 fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Box<dyn Error>> {
     let mut args_iter = args.into_iter();
-    let id = args_iter
-        .next()
-        .ok_or("Usage: qn view <id> [--render|-r] [--plain] [-t <tag>]")?;
+    let mut id: Option<String> = None;
     let mut render = force_render;
     let mut plain = false;
     let mut tag_filters: Vec<String> = Vec::new();
@@ -258,9 +256,17 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
                     return Err("Provide a tag after -t/--tag".into());
                 }
             }
-            other => return Err(format!("Unknown flag for view: {other}").into()),
+            other => {
+                if other.starts_with('-') {
+                    return Err(format!("Unknown flag for view: {other}").into());
+                }
+                if id.is_none() {
+                    id = Some(other.to_string());
+                }
+            }
         }
     }
+    let id = id.ok_or("Usage: qn view <id> [--render|-r] [--plain] [-t <tag>]")?;
     let use_color = !plain && env::var("NO_COLOR").is_err();
     let path = note_path(dir, &id);
     if !path.exists() {
@@ -288,7 +294,7 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
 
 fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut args_iter = args.into_iter();
-    let id = args_iter.next().ok_or("Usage: qn edit <id> [-t <tag>]")?;
+    let mut id: Option<String> = None;
     let mut tag_filters: Vec<String> = Vec::new();
     while let Some(arg) = args_iter.next() {
         match arg.as_str() {
@@ -302,9 +308,17 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                     return Err("Provide a tag after -t/--tag".into());
                 }
             }
-            other => return Err(format!("Unknown flag for edit: {other}").into()),
+            other => {
+                if other.starts_with('-') {
+                    return Err(format!("Unknown flag for edit: {other}").into());
+                }
+                if id.is_none() {
+                    id = Some(other.to_string());
+                }
+            }
         }
     }
+    let id = id.ok_or("Usage: qn edit <id> [-t <tag>]")?;
     let path = note_path(dir, &id);
     if !path.exists() {
         return Err(format!("Note {id} not found").into());
@@ -520,11 +534,11 @@ fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
         return Err("Usage: qn seed <count> [--chars N] [-t <tag> ...] [--markdown]".into());
     }
-    let count: usize = args[0].parse().map_err(|_| "Count must be a number")?;
+    let mut count: Option<usize> = None;
     let mut body_len: usize = 400;
     let mut tags: Vec<String> = Vec::new();
     let mut markdown = false;
-    let mut iter = args.into_iter().skip(1);
+    let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--chars" => {
@@ -547,9 +561,17 @@ fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             "--markdown" => {
                 markdown = true;
             }
-            other => return Err(format!("Unknown flag for seed: {other}").into()),
+            other => {
+                if other.starts_with('-') {
+                    return Err(format!("Unknown flag for seed: {other}").into());
+                }
+                if count.is_none() {
+                    count = Some(other.parse().map_err(|_| "Count must be a number")?);
+                }
+            }
         }
     }
+    let count = count.ok_or("Provide a count for seed")?;
 
     for i in 0..count {
         let title = format!("Seed note {}", short_timestamp());

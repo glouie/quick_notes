@@ -76,7 +76,7 @@ fn view_render_plain_and_tag_guard() {
         .to_string();
 
     cmd(&temp)
-        .args(["view", &id, "--render", "--plain", "-t", "#demo"])
+        .args(["view", "--render", "--plain", "-t", "#demo", &id])
         .assert()
         .success()
         .stdout(predicate::str::contains("render body"))
@@ -110,7 +110,7 @@ fn edit_tag_guard_blocks_mismatch() {
 
     cmd(&temp)
         .env("EDITOR", "true")
-        .args(["edit", &id, "-t", "#keep"])
+        .args(["edit", "-t", "#keep", &id])
         .assert()
         .success();
 
@@ -401,7 +401,7 @@ fn seed_with_tags_and_list_sort() {
 fn seed_with_markdown_samples() {
     let temp = TempDir::new().unwrap();
     cmd(&temp)
-        .args(["seed", "1", "--markdown", "-t", "md"])
+        .args(["seed", "--markdown", "-t", "md", "1"])
         .assert()
         .success();
     let list_out = cmd(&temp)
