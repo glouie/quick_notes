@@ -7,7 +7,7 @@ _qn() {
   local state
   _arguments -C \
     '1:command:(add new list view render edit delete delete-all seed tags path help completion)' \
-    '*::arg:->args'
+    '*:note id:_qn_note_ids'
 }
 
 _qn_note_ids() {
@@ -56,7 +56,7 @@ _qn_note_ids() {
     renderer="qn"
   fi
 
-  local fzf_opts="--preview 'env -u NO_COLOR CLICOLOR_FORCE=1 ${renderer} render \$(basename {}) 2>/dev/null || sed -n \"1,120p\" {}' --preview-window=down:70% --ansi"
+  local fzf_opts="--preview 'env -u NO_COLOR CLICOLOR_FORCE=1 ${renderer} render \$(basename {} .md) 2>/dev/null || sed -n \"1,120p\" {}' --preview-window=down:70% --ansi"
   if [[ ${words[2]} == delete ]]; then
     fzf_opts="$fzf_opts --multi"
   fi
