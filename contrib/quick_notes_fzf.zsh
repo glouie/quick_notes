@@ -26,7 +26,7 @@ _qn_note_ids() {
     return 1
   fi
 
-  local cur_prefix=${words[CURRENT]}
+  local cur_prefix=$PREFIX
   local -a stems
   stems=(${files:t:r})
 
