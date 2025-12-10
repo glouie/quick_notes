@@ -7,6 +7,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use terminal_size::{Width, terminal_size};
 use yansi::Paint;
 
 const PINNED_TAGS_DEFAULT: &str = "#todo,#meeting,#scratch";
@@ -211,30 +212,24 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let use_color = env::var("NO_COLOR").is_err();
     let previews: Vec<String> = notes.iter().map(preview_line).collect();
     let tags_plain: Vec<String> = notes.iter().map(|n| n.tags.join(" ")).collect();
-    let widths = column_widths(&notes, &previews, &tags_plain);
+    let term_width = terminal_columns().unwrap_or(120);
+    let widths = column_widths(&notes, &previews, &tags_plain, term_width);
 
     print_list_header(&widths, use_color);
 
     for (idx, n) in notes.iter().enumerate() {
         let preview = &previews[idx];
-        let tags_display = if widths.include_tags {
-            format_tags(&n.tags, use_color)
-        } else {
-            String::new()
-        };
         let line = format_list_row(
-            &format_id(&n.id, use_color),
-            n.id.chars().count(),
-            &format_timestamp(&n.updated, use_color),
-            n.updated.chars().count(),
+            &n.id,
+            &n.updated,
             preview,
-            preview.chars().count(),
             if widths.include_tags {
-                Some((&tags_display, tags_plain[idx].chars().count()))
+                Some(n.tags.as_slice())
             } else {
                 None
             },
             &widths,
+            use_color,
         );
         println!("{line}");
     }
@@ -242,34 +237,19 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn print_list_header(widths: &ColumnWidths, use_color: bool) {
-    let preview_header = if use_color {
-        Paint::new("Preview").bold().to_string()
+    let tags_header: Option<Vec<String>> = if widths.include_tags {
+        Some(vec!["Tags".to_string()])
     } else {
-        "Preview".to_string()
-    };
-    let tags_header = if widths.include_tags {
-        if use_color {
-            Paint::new("Tags").bold().to_string()
-        } else {
-            "Tags".to_string()
-        }
-    } else {
-        String::new()
+        None
     };
 
     let header = format_list_row(
-        &format_id("ID", use_color),
-        "ID".len(),
-        &format_timestamp("Updated", use_color),
-        "Updated".len(),
-        &preview_header,
-        "Preview".len(),
-        if widths.include_tags {
-            Some((&tags_header, "Tags".len()))
-        } else {
-            None
-        },
+        "ID",
+        "Updated",
+        "Preview",
+        tags_header.as_deref(),
         widths,
+        use_color,
     );
     println!("{header}");
 }
@@ -283,7 +263,20 @@ struct ColumnWidths {
     include_tags: bool,
 }
 
-fn column_widths(notes: &[Note], previews: &[String], tags_plain: &[String]) -> ColumnWidths {
+impl ColumnWidths {
+    fn total(&self) -> usize {
+        let spaces = if self.include_tags { 3 } else { 2 };
+        let tags = if self.include_tags { self.tags } else { 0 };
+        self.id + self.updated + self.preview + tags + spaces
+    }
+}
+
+fn column_widths(
+    notes: &[Note],
+    previews: &[String],
+    tags_plain: &[String],
+    term_width: usize,
+) -> ColumnWidths {
     let id_width = notes
         .iter()
         .map(|n| n.id.chars().count())
@@ -314,16 +307,109 @@ fn column_widths(notes: &[Note], previews: &[String], tags_plain: &[String]) -> 
         0
     };
 
-    ColumnWidths {
+    let widths = ColumnWidths {
         id: id_width,
         updated: updated_width,
         preview: preview_width,
         tags: tags_width,
         include_tags,
+    };
+
+    shrink_widths(widths, term_width)
+}
+
+fn terminal_columns() -> Option<usize> {
+    if let Ok(cols) = env::var("COLUMNS") {
+        if let Ok(v) = cols.parse::<usize>() {
+            if v > 0 {
+                return Some(v);
+            }
+        }
     }
+    if let Some((Width(w), _)) = terminal_size() {
+        if w > 0 {
+            return Some(w as usize);
+        }
+    }
+    None
+}
+
+fn shrink_widths(mut w: ColumnWidths, term_width: usize) -> ColumnWidths {
+    let min_preview = 4;
+    let min_tags = 4;
+    let min_updated = "Updated".len();
+    let min_id = "ID".len();
+
+    let reduce = |value: &mut usize, min: usize, excess: &mut isize| {
+        if *excess <= 0 {
+            return;
+        }
+        let reducible = (*value as isize - min as isize).max(0);
+        let delta = reducible.min(*excess);
+        *value = value.saturating_sub(delta as usize);
+        *excess -= delta;
+    };
+
+    let mut excess = w.total() as isize - term_width as isize;
+    if excess > 0 {
+        reduce(&mut w.preview, min_preview, &mut excess);
+    }
+    if excess > 0 && w.include_tags {
+        reduce(&mut w.tags, min_tags, &mut excess);
+    }
+    if excess > 0 {
+        reduce(&mut w.updated, min_updated, &mut excess);
+    }
+    if excess > 0 {
+        reduce(&mut w.id, min_id, &mut excess);
+    }
+
+    w
 }
 
 fn format_list_row(
+    id: &str,
+    updated: &str,
+    preview: &str,
+    tags: Option<&[String]>,
+    widths: &ColumnWidths,
+    use_color: bool,
+) -> String {
+    let id_plain = truncate_with_ellipsis(id, widths.id);
+    let id_len = id_plain.chars().count();
+    let id_display = format_id(&id_plain, use_color);
+
+    let updated_plain = truncate_with_ellipsis(updated, widths.updated);
+    let updated_len = updated_plain.chars().count();
+    let updated_display = format_timestamp(&updated_plain, use_color);
+
+    let preview_plain = truncate_with_ellipsis(preview, widths.preview);
+    let preview_len = preview_plain.chars().count();
+    let preview_display = preview_plain.clone();
+
+    let (tags_display, tags_len) = if widths.include_tags {
+        format_tags_clamped(tags.unwrap_or(&[]), widths.tags, use_color)
+    } else {
+        (String::new(), 0)
+    };
+
+    assemble_row(
+        &id_display,
+        id_len,
+        &updated_display,
+        updated_len,
+        &preview_display,
+        preview_len,
+        if widths.include_tags {
+            Some((&tags_display, tags_len))
+        } else {
+            None
+        },
+        widths,
+    )
+}
+
+fn assemble_row(
     id_display: &str,
     id_len: usize,
     updated_display: &str,
@@ -354,6 +440,25 @@ fn pad_field(display: &str, target: usize, plain_len: usize) -> String {
     let mut out = display.to_string();
     let padding = target.saturating_sub(plain_len);
     out.push_str(&" ".repeat(padding));
+    out
+}
+
+fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+    let len = text.chars().count();
+    if len <= max_width {
+        return text.to_string();
+    }
+    if max_width == 1 {
+        return "…".to_string();
+    }
+    let mut out = text
+        .chars()
+        .take(max_width.saturating_sub(1))
+        .collect::<String>();
+    out.push('…');
     out
 }
 
@@ -924,20 +1029,48 @@ fn preview_line(note: &Note) -> String {
     text
 }
 
-fn format_tags(tags: &[String], use_color: bool) -> String {
-    if tags.is_empty() {
-        return String::new();
+fn format_tags_clamped(tags: &[String], max_width: usize, use_color: bool) -> (String, usize) {
+    if tags.is_empty() || max_width == 0 {
+        return (String::new(), 0);
     }
-    let mut out = Vec::new();
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut used = 0usize;
+
     for tag in tags {
-        if use_color {
-            let (r, g, b) = color_for_tag(tag);
-            out.push(Paint::rgb(tag.as_str(), r, g, b).bold().to_string());
+        let tag_len = tag.chars().count();
+        let sep_len = if parts.is_empty() { 0 } else { 1 };
+        if used + sep_len + tag_len <= max_width {
+            if sep_len == 1 {
+                parts.push(" ".to_string());
+            }
+            parts.push(format_tag_text(tag, use_color));
+            used += sep_len + tag_len;
         } else {
-            out.push(tag.clone());
+            let remaining = max_width.saturating_sub(used + sep_len);
+            if remaining > 0 {
+                if sep_len == 1 {
+                    parts.push(" ".to_string());
+                    used += sep_len;
+                }
+                let truncated = truncate_with_ellipsis(tag, remaining);
+                parts.push(format_tag_text(&truncated, use_color));
+                used += truncated.chars().count();
+            }
+            break;
         }
     }
-    out.join(" ")
+
+    (parts.concat(), used)
+}
+
+fn format_tag_text(tag: &str, use_color: bool) -> String {
+    if use_color {
+        let (r, g, b) = color_for_tag(tag);
+        Paint::rgb(tag, r, g, b).bold().to_string()
+    } else {
+        tag.to_string()
+    }
 }
 
 fn color_for_tag(tag: &str) -> (u8, u8, u8) {

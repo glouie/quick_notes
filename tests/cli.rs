@@ -12,6 +12,7 @@ fn cmd(temp: &TempDir) -> assert_cmd::Command {
     let mut c = assert_cmd::Command::cargo_bin("quick_notes").unwrap();
     c.env("QUICK_NOTES_DIR", temp.path())
         .env("NO_COLOR", "1")
+        .env("COLUMNS", "80")
         .env("QUICK_NOTES_NO_FZF", "1");
     c
 }
@@ -277,6 +278,36 @@ fn list_headers_align_to_columns() {
         &first[tags_pos..tags_pos + expected_tags.len()],
         expected_tags
     );
+}
+
+#[test]
+fn list_respects_terminal_width() {
+    let temp = TempDir::new().unwrap();
+    write_note_file(
+        temp.path(),
+        "longid1234567890",
+        "Very long title",
+        "01/01/2020 10:00 AM -00:00",
+        "01/02/2020 10:00 AM -00:00",
+        &["firsttag", "secondtag", "thirdtag"],
+        "This is an extremely long preview body that should be trimmed to fit within the provided terminal width for testing purposes.",
+    );
+
+    let out = cmd(&temp)
+        .env("COLUMNS", "50")
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    for line in String::from_utf8_lossy(&out).lines() {
+        assert!(
+            line.chars().count() <= 50,
+            "line exceeds terminal width: {line}"
+        );
+    }
 }
 
 #[test]
