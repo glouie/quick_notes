@@ -7,12 +7,12 @@ _qn() {
   local state
   _arguments -C \
     '1:command:(add new list view render edit delete delete-all seed tags path help completion)' \
-    '2:note id:_qn_note_ids' \
-    '*::text:->text'
+    '*::arg:->args'
 }
 
 _qn_note_ids() {
-  if [[ ${words[2]} != view && ${words[2]} != render && ${words[2]} != edit && ${words[2]} != delete ]]; then
+  local cmd=${words[2]}
+  if [[ $cmd != view && $cmd != render && $cmd != edit && $cmd != delete ]]; then
     return 1
   fi
 
