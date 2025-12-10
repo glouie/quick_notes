@@ -209,20 +209,152 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     let use_color = env::var("NO_COLOR").is_err();
+    let previews: Vec<String> = notes.iter().map(preview_line).collect();
+    let tags_plain: Vec<String> = notes.iter().map(|n| n.tags.join(" ")).collect();
+    let widths = column_widths(&notes, &previews, &tags_plain);
 
-    for n in notes {
-        let preview = preview_line(&n);
-        let id_text = format_id(&n.id, use_color);
-        let ts_text = format_timestamp(&n.updated, use_color);
-        let tags_text = format_tags(&n.tags, use_color);
+    print_list_header(&widths, use_color);
 
-        if tags_text.is_empty() {
-            println!("{} {} {}", id_text, ts_text, preview);
+    for (idx, n) in notes.iter().enumerate() {
+        let preview = &previews[idx];
+        let tags_display = if widths.include_tags {
+            format_tags(&n.tags, use_color)
         } else {
-            println!("{} {} {} {}", id_text, ts_text, preview, tags_text);
-        }
+            String::new()
+        };
+        let line = format_list_row(
+            &format_id(&n.id, use_color),
+            n.id.chars().count(),
+            &format_timestamp(&n.updated, use_color),
+            n.updated.chars().count(),
+            preview,
+            preview.chars().count(),
+            if widths.include_tags {
+                Some((&tags_display, tags_plain[idx].chars().count()))
+            } else {
+                None
+            },
+            &widths,
+        );
+        println!("{line}");
     }
     Ok(())
+}
+
+fn print_list_header(widths: &ColumnWidths, use_color: bool) {
+    let preview_header = if use_color {
+        Paint::new("Preview").bold().to_string()
+    } else {
+        "Preview".to_string()
+    };
+    let tags_header = if widths.include_tags {
+        if use_color {
+            Paint::new("Tags").bold().to_string()
+        } else {
+            "Tags".to_string()
+        }
+    } else {
+        String::new()
+    };
+
+    let header = format_list_row(
+        &format_id("ID", use_color),
+        "ID".len(),
+        &format_timestamp("Updated", use_color),
+        "Updated".len(),
+        &preview_header,
+        "Preview".len(),
+        if widths.include_tags {
+            Some((&tags_header, "Tags".len()))
+        } else {
+            None
+        },
+        widths,
+    );
+    println!("{header}");
+}
+
+#[derive(Debug)]
+struct ColumnWidths {
+    id: usize,
+    updated: usize,
+    preview: usize,
+    tags: usize,
+    include_tags: bool,
+}
+
+fn column_widths(notes: &[Note], previews: &[String], tags_plain: &[String]) -> ColumnWidths {
+    let id_width = notes
+        .iter()
+        .map(|n| n.id.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max("ID".len());
+    let updated_width = notes
+        .iter()
+        .map(|n| n.updated.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max("Updated".len());
+    let preview_width = previews
+        .iter()
+        .map(|p| p.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max("Preview".len());
+    let include_tags = notes.iter().any(|n| !n.tags.is_empty());
+    let tags_width = if include_tags {
+        tags_plain
+            .iter()
+            .map(|t| t.chars().count())
+            .max()
+            .unwrap_or(0)
+            .max("Tags".len())
+    } else {
+        0
+    };
+
+    ColumnWidths {
+        id: id_width,
+        updated: updated_width,
+        preview: preview_width,
+        tags: tags_width,
+        include_tags,
+    }
+}
+
+fn format_list_row(
+    id_display: &str,
+    id_len: usize,
+    updated_display: &str,
+    updated_len: usize,
+    preview_display: &str,
+    preview_len: usize,
+    tags: Option<(&str, usize)>,
+    widths: &ColumnWidths,
+) -> String {
+    let mut line = String::new();
+    line.push_str(&pad_field(id_display, widths.id, id_len));
+    line.push(' ');
+    line.push_str(&pad_field(updated_display, widths.updated, updated_len));
+    line.push(' ');
+    line.push_str(&pad_field(preview_display, widths.preview, preview_len));
+    if widths.include_tags {
+        line.push(' ');
+        if let Some((tags_display, tags_len)) = tags {
+            line.push_str(&pad_field(tags_display, widths.tags, tags_len));
+        } else {
+            line.push_str(&" ".repeat(widths.tags));
+        }
+    }
+    line
+}
+
+fn pad_field(display: &str, target: usize, plain_len: usize) -> String {
+    let mut out = display.to_string();
+    let padding = target.saturating_sub(plain_len);
+    out.push_str(&" ".repeat(padding));
+    out
 }
 
 fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {

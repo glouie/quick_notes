@@ -55,6 +55,23 @@ fn write_note_file(
     fs::write(dir.join(format!("{id}.md")), content).unwrap();
 }
 
+fn list_ids(output: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(output)
+        .lines()
+        .filter_map(|line| {
+            let id = line.split_whitespace().next()?;
+            if id.eq_ignore_ascii_case("id") || id == "No" {
+                return None;
+            }
+            Some(id.to_string())
+        })
+        .collect()
+}
+
+fn first_list_id(output: &[u8]) -> String {
+    list_ids(output).into_iter().next().expect("note id")
+}
+
 #[test]
 fn view_render_plain_and_tag_guard() {
     let temp = TempDir::new().unwrap();
@@ -69,11 +86,7 @@ fn view_render_plain_and_tag_guard() {
         .get_output()
         .stdout
         .clone();
-    let id = String::from_utf8_lossy(&list_out)
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_string();
+    let id = first_list_id(&list_out);
 
     cmd(&temp)
         .args(["view", "--render", "--plain", "-t", "#demo", &id])
@@ -102,11 +115,7 @@ fn edit_tag_guard_blocks_mismatch() {
         .get_output()
         .stdout
         .clone();
-    let id = String::from_utf8_lossy(&list_out)
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_string();
+    let id = first_list_id(&list_out);
 
     cmd(&temp)
         .env("EDITOR", "true")
@@ -139,7 +148,7 @@ fn delete_with_tag_filter() {
     let list_str = String::from_utf8_lossy(&list_out);
     let mut keep_id = String::new();
     let mut drop_id = String::new();
-    for line in list_str.lines() {
+    for line in list_str.lines().skip(1) {
         let id = line.split_whitespace().next().unwrap();
         if line.contains("keep me") {
             keep_id = id.to_string();
@@ -200,14 +209,7 @@ fn list_sort_created_updated_size() {
         .get_output()
         .stdout
         .clone();
-    let first = String::from_utf8_lossy(&created_asc)
-        .lines()
-        .next()
-        .unwrap()
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_string();
+    let first = first_list_id(&created_asc);
     assert_eq!(first, "a");
 
     let size_desc = cmd(&temp)
@@ -217,15 +219,64 @@ fn list_sort_created_updated_size() {
         .get_output()
         .stdout
         .clone();
-    let first_size = String::from_utf8_lossy(&size_desc)
-        .lines()
-        .next()
-        .unwrap()
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_string();
+    let first_size = first_list_id(&size_desc);
     assert_eq!(first_size, "b");
+}
+
+#[test]
+fn list_headers_align_to_columns() {
+    let temp = TempDir::new().unwrap();
+    write_note_file(
+        temp.path(),
+        "a",
+        "A",
+        "01/01/2020 10:00 AM -00:00",
+        "01/01/2020 10:00 AM -00:00",
+        &[],
+        "short",
+    );
+    write_note_file(
+        temp.path(),
+        "b",
+        "B",
+        "01/02/2020 10:00 AM -00:00",
+        "01/02/2020 10:00 AM -00:00",
+        &["tag"],
+        "body",
+    );
+
+    let out = cmd(&temp)
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let out_str = String::from_utf8_lossy(&out);
+    let mut lines = out_str.lines();
+    let header = lines.next().unwrap();
+    let first = lines.next().unwrap();
+
+    let updated_pos = header.find("Updated").unwrap();
+    let preview_pos = header.find("Preview").unwrap();
+    let tags_pos = header.find("Tags").unwrap();
+
+    let expected_updated = "01/02/2020 10:00 AM -00:00";
+    let expected_preview = "B body";
+    let expected_tags = "#tag";
+
+    assert_eq!(
+        &first[updated_pos..updated_pos + expected_updated.len()],
+        expected_updated
+    );
+    assert_eq!(
+        &first[preview_pos..preview_pos + expected_preview.len()],
+        expected_preview
+    );
+    assert_eq!(
+        &first[tags_pos..tags_pos + expected_tags.len()],
+        expected_tags
+    );
 }
 
 #[test]
@@ -278,9 +329,9 @@ fn add_and_list_and_view() {
     let out_str = String::from_utf8_lossy(&output);
     assert!(out_str.contains("hello world"));
     // view render
-    let id = out_str.split_whitespace().next().unwrap();
+    let id = first_list_id(&output);
     cmd(&temp)
-        .args(["render", id])
+        .args(["render", &id])
         .assert()
         .success()
         .stdout(predicate::str::contains("hello world"));
@@ -345,15 +396,16 @@ fn delete_and_delete_all() {
         .get_output()
         .stdout
         .clone();
-    let list_str = String::from_utf8_lossy(&list_out);
-    let ids: Vec<&str> = list_str
-        .lines()
-        .take(2)
-        .map(|l| l.split_whitespace().next().unwrap())
-        .collect();
-    cmd(&temp).args(["delete", ids[0]]).assert().success();
+    let ids: Vec<String> = list_ids(&list_out).into_iter().take(2).collect();
+    cmd(&temp)
+        .args(["delete", ids[0].as_str()])
+        .assert()
+        .success();
     // ensure first gone
-    cmd(&temp).args(["view", ids[0]]).assert().failure();
+    cmd(&temp)
+        .args(["view", ids[0].as_str()])
+        .assert()
+        .failure();
     // delete-all removes remainder
     cmd(&temp).args(["delete-all"]).assert().success();
     let after = cmd(&temp)
@@ -411,11 +463,7 @@ fn seed_with_markdown_samples() {
         .get_output()
         .stdout
         .clone();
-    let id = String::from_utf8_lossy(&list_out)
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_string();
+    let id = first_list_id(&list_out);
     let note = read_note(temp.path(), &id);
     assert!(note.contains("# Heading"));
     assert!(note.contains("```rust"));
@@ -455,8 +503,7 @@ fn tags_written_in_header() {
         .get_output()
         .stdout
         .clone();
-    let list_str = String::from_utf8_lossy(&list_out);
-    let id = list_str.split_whitespace().next().unwrap();
-    let note = read_note(temp.path(), id);
+    let id = first_list_id(&list_out);
+    let note = read_note(temp.path(), &id);
     assert!(note.contains("Tags: #x, #y"));
 }
