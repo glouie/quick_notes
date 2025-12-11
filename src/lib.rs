@@ -513,18 +513,45 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
     if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
         return Err(format!("Note {id} does not have required tag(s)").into());
     }
-    if render {
+    let output = if render {
         let rendered = render_markdown(&note.body, use_color);
-        println!(
+        format!(
             "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
             note.title, note.id, note.created, note.updated, rendered
-        );
+        )
     } else {
-        println!(
+        format!(
             "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
             note.title, note.id, note.created, note.updated, note.body
-        );
+        )
+    };
+
+    if render && use_color {
+        if let Some(colorizer) = detect_bat() {
+            let mut child = Command::new(colorizer)
+                .args([
+                    "--color",
+                    "always",
+                    "--style",
+                    "plain",
+                    "--language",
+                    "markdown",
+                    "--paging",
+                    "never",
+                ])
+                .stdin(Stdio::piped())
+                .spawn()?;
+            if let Some(stdin) = child.stdin.as_mut() {
+                stdin.write_all(output.as_bytes())?;
+            }
+            let status = child.wait()?;
+            if status.success() {
+                return Ok(());
+            }
+        }
     }
+
+    print!("{output}");
     Ok(())
 }
 
@@ -1277,6 +1304,30 @@ fn highlight_inline_code(line: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+fn detect_bat() -> Option<&'static str> {
+    if Command::new("batcat")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .ok()
+        .map_or(false, |s| s.success())
+    {
+        return Some("batcat");
+    }
+    if Command::new("bat")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .ok()
+        .map_or(false, |s| s.success())
+    {
+        return Some("bat");
+    }
+    None
 }
 
 fn push_painted(text: &str, style: Style, use_color: bool) -> String {
