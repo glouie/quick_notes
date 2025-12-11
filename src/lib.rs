@@ -513,27 +513,29 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
     if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
         return Err(format!("Note {id} does not have required tag(s)").into());
     }
-    let output = if render {
-        let rendered = render_markdown(&note.body, use_color);
-        format!(
-            "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
-            note.title, note.id, note.created, note.updated, rendered
-        )
+    let body_for_output = if render {
+        render_markdown(&note.body, use_color)
     } else {
-        format!(
-            "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
-            note.title, note.id, note.created, note.updated, note.body
-        )
+        note.body.clone()
     };
+    let output = format!(
+        "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
+        note.title, note.id, note.created, note.updated, body_for_output
+    );
 
     if render && use_color {
         if let Some(colorizer) = detect_glow() {
+            // Feed raw markdown to glow so it owns styling.
+            let raw_markdown = format!(
+                "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
+                note.title, note.id, note.created, note.updated, note.body
+            );
             let mut child = Command::new(colorizer)
                 .arg("-")
                 .stdin(Stdio::piped())
                 .spawn()?;
             if let Some(stdin) = child.stdin.as_mut() {
-                stdin.write_all(output.as_bytes())?;
+                stdin.write_all(raw_markdown.as_bytes())?;
             }
             let status = child.wait()?;
             if status.success() {
