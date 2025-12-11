@@ -63,9 +63,10 @@ Tips
     ```
   - Reload your shell, copy text, press `Ctrl+Q` to capture a note.
 - FZF completion for note selection (zsh):
-  - Add this one-liner to `~/.zshrc` (after `compinit`): `source <(qn completion zsh)`
+  - Add this one-liner to `~/.zshrc` (after `compinit` is run): `source <(qn completion zsh)`
   - On `qn view`/`qn render`/`qn edit`, press Tab to open an fzf list of note ids with a preview of each file; the selected id is inserted automatically.
   - On `qn delete`, press Tab to open fzf with multi-select and preview, then hit Enter to insert selected ids.
+  - If completion fails with prompt/keymap errors, double-check that `compinit` runs before sourcing the script.
 - Tags:
   - Add tags on creation with `-t/--tag`, e.g., `qn add "text" -t todo -t #meeting`.
   - Filter `list`/`view`/`edit`/`delete` by tag using `-t/--tag`.
