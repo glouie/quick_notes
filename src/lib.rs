@@ -1309,14 +1309,15 @@ fn generate_body(len: usize, seed: usize) -> String {
 fn generate_markdown_body(seed: usize) -> String {
     format!(
         "# Heading {seed}\n\n\
-        ## Subheading\n\n\
-        - bullet one\n- bullet two\n- bullet three\n\n\
-        1. ordered one\n2. ordered two\n\n\
-        **bold text** and _italic text_ with `inline code`.\n\n\
-        ```rust\nfn example_{seed}() {{ println!(\"hello\"); }}\n```\n\n\
-        > Blockquote example {seed}\n\n\
-        Horizontal rule:\n---\n\n\
-        Link: [example](https://example.com)\n"
+## Subheading\n\n\
+- bullet one\n- bullet two\n- bullet three\n\n\
+1. ordered one\n2. ordered two\n\n\
+**bold text** and _italic text_ with `inline code`.\n\n\
+```rust\nfn example_{seed}() {{ println!(\"hello\"); }}\n```\n\n\
+> Blockquote example {seed}\n\n\
+---\n\n\
+Link: [example](https://example.com)\n\n\
+| Feature | Value |\n|---------|-------|\n| Seed    | {seed} |\n| Type    | Markdown |\n"
     )
 }
 

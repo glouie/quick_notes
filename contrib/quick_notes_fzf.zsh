@@ -3,10 +3,11 @@
 # FZF-powered completion for qn view/render/edit commands.
 # Requirements: fzf installed; notes live in $QUICK_NOTES_DIR or ~/.quick_notes.
 
-# Ensure the completion system is available even if the user hasn't run compinit.
-if ! typeset -f compinit >/dev/null 2>&1; then
-  autoload -Uz compinit
-  compinit
+# Bail out if compinit hasn't been run yet. Running it here can fight with
+# prompt/keymap hooks (e.g., starship) and spiral into FUNCNEST errors.
+if ! typeset -f _arguments >/dev/null 2>&1; then
+  [[ -o interactive ]] && print -u2 "quick_notes completion: run 'compinit' before sourcing this script."
+  return 0 2>/dev/null || exit 0
 fi
 
 _qn() {
