@@ -73,7 +73,6 @@ default updated desc)
   qn view <id> [--render|-r] [--plain]
                                   Show a note (render markdown with \
 --render; disable color with --plain)
-  qn render <id>                  Same as: qn view <id> --render
   qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires \
 tag match when provided)
   qn delete [ids...] [--fzf] [-t|--tag <tag>]
