@@ -527,18 +527,9 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
     };
 
     if render && use_color {
-        if let Some(colorizer) = detect_bat() {
+        if let Some(colorizer) = detect_glow() {
             let mut child = Command::new(colorizer)
-                .args([
-                    "--color",
-                    "always",
-                    "--style",
-                    "plain",
-                    "--language",
-                    "markdown",
-                    "--paging",
-                    "never",
-                ])
+                .arg("-")
                 .stdin(Stdio::piped())
                 .spawn()?;
             if let Some(stdin) = child.stdin.as_mut() {
@@ -548,6 +539,10 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
             if status.success() {
                 return Ok(());
             }
+        } else {
+            eprintln!(
+                "Hint: install `glow` for rich markdown rendering (https://github.com/charmbracelet/glow)"
+            );
         }
     }
 
@@ -1306,8 +1301,8 @@ fn highlight_inline_code(line: &str) -> String {
     out
 }
 
-fn detect_bat() -> Option<&'static str> {
-    if Command::new("batcat")
+fn detect_glow() -> Option<&'static str> {
+    if Command::new("glow")
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -1315,17 +1310,7 @@ fn detect_bat() -> Option<&'static str> {
         .ok()
         .map_or(false, |s| s.success())
     {
-        return Some("batcat");
-    }
-    if Command::new("bat")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .ok()
-        .map_or(false, |s| s.success())
-    {
-        return Some("bat");
+        return Some("glow");
     }
     None
 }
