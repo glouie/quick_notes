@@ -1,15 +1,18 @@
 use chrono::{DateTime, FixedOffset, Local};
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
 use terminal_size::{Width, terminal_size};
 use yansi::Paint;
 
 const PINNED_TAGS_DEFAULT: &str = "#todo,#meeting,#scratch";
+const ID_TS_WIDTH: usize = 9;
 
 #[derive(Debug, Clone)]
 struct Note {
@@ -41,6 +44,7 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
         "render" => view_note(args, &dir, true)?,
         "edit" => edit_note(args, &dir)?,
         "delete" => delete_notes(args, &dir)?,
+        "migrate-ids" => migrate_ids(&dir)?,
         "seed" => seed_notes(args, &dir)?,
         "delete-all" => delete_all_notes(&dir)?,
         "tags" => list_tags(&dir)?,
@@ -71,6 +75,7 @@ Usage:
   qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires tag match when provided)
   qn delete [ids...] [--fzf] [-t|--tag <tag>]
                                   Delete one or more notes (fzf multi-select when --fzf or no ids and fzf available; optional tag filter)
+  qn migrate-ids                  Regenerate note IDs to the current shorter format
   qn delete-all                   Delete every note in the notes directory
   qn tags                         List tags with counts and first/last use
   qn seed <count> [--chars N]     Generate test notes (random body of N chars; default 400)
@@ -459,6 +464,37 @@ fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
         .collect::<String>();
     out.push('…');
     out
+}
+
+#[derive(Default)]
+struct IdState {
+    last_ts: i64,
+    counter: u32,
+}
+
+fn encode_base62(num: u64) -> String {
+    const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    if num == 0 {
+        return "0".to_string();
+    }
+    let mut n = num;
+    let base = ALPHABET.len() as u64;
+    let mut out = Vec::new();
+    while n > 0 {
+        let idx = (n % base) as usize;
+        out.push(ALPHABET[idx] as char);
+        n /= base;
+    }
+    out.iter().rev().collect()
+}
+
+fn encode_base62_width(num: u64, width: usize) -> String {
+    let base = encode_base62(num);
+    if base.len() >= width {
+        base
+    } else {
+        format!("{}{}", "0".repeat(width - base.len()), base)
+    }
 }
 
 fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
@@ -887,26 +923,87 @@ fn create_note(
     Ok(note)
 }
 
+fn migrate_ids(dir: &Path) -> Result<(), Box<dyn Error>> {
+    let files = list_note_files(dir)?;
+    if files.is_empty() {
+        println!("No notes to migrate.");
+        return Ok(());
+    }
+
+    let mut reserved: HashSet<String> = files
+        .iter()
+        .filter_map(|(p, _)| {
+            p.file_stem()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+        })
+        .collect();
+    let mut moves: Vec<(PathBuf, String)> = Vec::new();
+
+    for (path, _) in files {
+        let new_id = generate_new_id(dir, &mut reserved)?;
+        reserved.insert(new_id.clone());
+        moves.push((path, new_id));
+    }
+
+    for (old_path, new_id) in moves {
+        let new_path = note_path(dir, &new_id);
+        fs::rename(&old_path, &new_path)?;
+        println!(
+            "Migrated {} -> {}",
+            old_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default(),
+            new_id
+        );
+    }
+
+    Ok(())
+}
+
 fn note_path(dir: &Path, id: &str) -> PathBuf {
     dir.join(format!("{id}.md"))
 }
 
 fn unique_id(dir: &Path) -> io::Result<String> {
-    let base = Local::now().timestamp_micros().to_string();
-    for suffix in 0..5000 {
-        let candidate = if suffix == 0 {
-            base.clone()
+    generate_new_id(dir, &mut HashSet::new())
+}
+
+fn generate_new_id(dir: &Path, reserved: &mut HashSet<String>) -> io::Result<String> {
+    static ID_STATE: OnceLock<Mutex<IdState>> = OnceLock::new();
+    let state = ID_STATE.get_or_init(|| Mutex::new(IdState::default()));
+
+    let mut guard = state.lock().unwrap();
+    loop {
+        let now = Local::now().timestamp_micros();
+        let ts = if now <= guard.last_ts {
+            guard.last_ts + 1
         } else {
-            format!("{base}-{suffix}")
+            now
         };
-        if !note_path(dir, &candidate).exists() {
-            return Ok(candidate);
+
+        if ts == guard.last_ts {
+            guard.counter = guard.counter.saturating_add(1);
+        } else {
+            guard.last_ts = ts;
+            guard.counter = 0;
         }
+
+        let ts_enc = encode_base62_width(ts.max(0) as u64, ID_TS_WIDTH);
+        let id = if guard.counter == 0 {
+            ts_enc
+        } else {
+            format!("{ts_enc}{}", encode_base62(guard.counter as u64))
+        };
+
+        if !reserved.contains(&id) && !note_path(dir, &id).exists() {
+            return Ok(id);
+        }
+
+        reserved.insert(id);
+        guard.counter = guard.counter.saturating_add(1);
     }
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        "Could not generate unique id",
-    ))
 }
 
 fn write_note(note: &Note, dir: &Path) -> io::Result<()> {
@@ -974,7 +1071,7 @@ fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
 }
 
 fn short_timestamp() -> String {
-    Local::now().timestamp_micros().to_string()
+    encode_base62_width(Local::now().timestamp_micros().max(0) as u64, ID_TS_WIDTH)
 }
 
 fn timestamp_string() -> String {

@@ -3,6 +3,12 @@
 # FZF-powered completion for qn view/render/edit commands.
 # Requirements: fzf installed; notes live in $QUICK_NOTES_DIR or ~/.quick_notes.
 
+# Ensure the completion system is available even if the user hasn't run compinit.
+if ! typeset -f compinit >/dev/null 2>&1; then
+  autoload -Uz compinit
+  compinit
+fi
+
 _qn() {
   local state
   _arguments -C \

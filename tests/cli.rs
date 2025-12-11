@@ -69,6 +69,14 @@ fn list_ids(output: &[u8]) -> Vec<String> {
         .collect()
 }
 
+fn parse_added_id(output: &[u8]) -> String {
+    String::from_utf8_lossy(output)
+        .split_whitespace()
+        .nth(2)
+        .expect("id in add output")
+        .to_string()
+}
+
 fn first_list_id(output: &[u8]) -> String {
     list_ids(output).into_iter().next().expect("note id")
 }
@@ -225,6 +233,30 @@ fn list_sort_created_updated_size() {
 }
 
 #[test]
+fn ids_are_short_and_incremental() {
+    let temp = TempDir::new().unwrap();
+    let first_out = cmd(&temp)
+        .args(["add", "one"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let second_out = cmd(&temp)
+        .args(["add", "two"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let first = parse_added_id(&first_out);
+    let second = parse_added_id(&second_out);
+    assert!(first.len() <= 11);
+    assert!(second.len() <= 11);
+    assert!(first < second, "ids should increment: {first} >= {second}");
+}
+
+#[test]
 fn list_headers_align_to_columns() {
     let temp = TempDir::new().unwrap();
     write_note_file(
@@ -278,6 +310,54 @@ fn list_headers_align_to_columns() {
         &first[tags_pos..tags_pos + expected_tags.len()],
         expected_tags
     );
+}
+
+#[test]
+fn migrate_ids_renames_existing_notes() {
+    let temp = TempDir::new().unwrap();
+    write_note_file(
+        temp.path(),
+        "2024010101010101",
+        "Old Id One",
+        "01/01/2020 10:00 AM -00:00",
+        "01/01/2020 10:00 AM -00:00",
+        &[],
+        "body",
+    );
+    write_note_file(
+        temp.path(),
+        "2024010101010102",
+        "Old Id Two",
+        "01/01/2020 10:00 AM -00:00",
+        "01/02/2020 10:00 AM -00:00",
+        &[],
+        "body",
+    );
+
+    cmd(&temp)
+        .args(["migrate-ids"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Migrated"));
+
+    let files: Vec<String> = std::fs::read_dir(temp.path())
+        .unwrap()
+        .filter_map(|e| {
+            let p = e.ok()?.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("md") {
+                p.file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(files.len(), 2);
+    for id in files {
+        assert!(id.len() <= 11, "id not shortened: {id}");
+    }
 }
 
 #[test]
