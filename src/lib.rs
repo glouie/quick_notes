@@ -239,10 +239,12 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     for (idx, n) in notes.iter().enumerate() {
         let preview = &previews[idx];
+        let preview_highlighted =
+            highlight_search(preview, search.as_deref(), use_color);
         let line = format_list_row(
             &n.id,
             &n.updated,
-            preview,
+            &preview_highlighted,
             if widths.include_tags { Some(n.tags.as_slice()) } else { None },
             &widths,
             use_color,
@@ -503,6 +505,33 @@ fn encode_base62_width(num: u64, width: usize) -> String {
     } else {
         format!("{}{}", "0".repeat(width - base.len()), base)
     }
+}
+
+fn highlight_search(
+    text: &str,
+    query: Option<&str>,
+    use_color: bool,
+) -> String {
+    let Some(q) = query else { return text.to_string() };
+    if q.is_empty() {
+        return text.to_string();
+    }
+    let q_lower = q.to_lowercase();
+    let mut out = String::new();
+    let mut remaining = text;
+    while let Some(pos) = remaining.to_lowercase().find(&q_lower) {
+        let (before, rest) = remaining.split_at(pos);
+        let (matched, after) = rest.split_at(q.len().min(rest.len()));
+        out.push_str(before);
+        if use_color {
+            out.push_str(&Paint::rgb(matched, 243, 139, 168).to_string());
+        } else {
+            out.push_str(matched);
+        }
+        remaining = after;
+    }
+    out.push_str(remaining);
+    out
 }
 
 fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
