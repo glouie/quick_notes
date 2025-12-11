@@ -1203,9 +1203,21 @@ fn generate_markdown_body(seed: usize) -> String {
 fn render_markdown(input: &str, use_color: bool) -> String {
     let mut rendered = String::new();
     let mut list_depth: usize = 0;
+    let mut in_code_block = false;
+    let mut code_lang: Option<String> = None;
+    let mut first_paragraph = true;
 
     for event in Parser::new(input) {
         match event {
+            Event::Start(Tag::Paragraph) => {
+                if !first_paragraph {
+                    rendered.push('\n');
+                }
+                first_paragraph = false;
+            }
+            Event::End(TagEnd::Paragraph) => {
+                rendered.push('\n');
+            }
             Event::Start(Tag::Heading { level, .. }) => {
                 rendered.push('\n');
                 let mark = match level {
@@ -1232,8 +1244,38 @@ fn render_markdown(input: &str, use_color: bool) -> String {
                 rendered.push_str(&"  ".repeat(list_depth.saturating_sub(1)));
                 push_styled(&mut rendered, "- ", Style::Bullet, use_color);
             }
+            Event::Start(Tag::CodeBlock(kind)) => {
+                in_code_block = true;
+                code_lang = match kind {
+                    pulldown_cmark::CodeBlockKind::Fenced(info) => {
+                        let lang = info.split_whitespace().next().unwrap_or("");
+                        if lang.is_empty() {
+                            None
+                        } else {
+                            Some(lang.to_string())
+                        }
+                    }
+                    pulldown_cmark::CodeBlockKind::Indented => None,
+                };
+                rendered.push('\n');
+                let fence = match &code_lang {
+                    Some(lang) => format!("```{}\n", lang),
+                    None => "```\n".to_string(),
+                };
+                push_styled(&mut rendered, &fence, Style::Code, use_color);
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                push_styled(&mut rendered, "```\n", Style::Code, use_color);
+                in_code_block = false;
+                code_lang = None;
+            }
             Event::Text(t) | Event::Code(t) => {
-                push_styled(&mut rendered, &t, Style::Body, use_color)
+                let style = if in_code_block {
+                    Style::Code
+                } else {
+                    Style::Body
+                };
+                push_styled(&mut rendered, &t, style, use_color);
             }
             Event::SoftBreak | Event::HardBreak => rendered.push('\n'),
             Event::Rule => {
@@ -1244,7 +1286,7 @@ fn render_markdown(input: &str, use_color: bool) -> String {
         }
     }
 
-    rendered.trim().to_string()
+    rendered
 }
 
 #[derive(Clone, Copy)]
@@ -1253,6 +1295,7 @@ enum Style {
     Bullet,
     Rule,
     Body,
+    Code,
 }
 
 fn push_styled(buf: &mut String, text: &str, style: Style, use_color: bool) {
@@ -1261,6 +1304,7 @@ fn push_styled(buf: &mut String, text: &str, style: Style, use_color: bool) {
             Style::Heading => Paint::cyan(text).bold(),
             Style::Bullet => Paint::yellow(text).bold(),
             Style::Rule => Paint::new(text).dim(),
+            Style::Code => Paint::blue(text),
             Style::Body => Paint::new(text),
         };
         buf.push_str(&painted.to_string());
