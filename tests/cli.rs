@@ -84,10 +84,7 @@ fn first_list_id(output: &[u8]) -> String {
 #[test]
 fn view_render_plain_and_tag_guard() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp)
-        .args(["add", "render body", "-t", "demo"])
-        .assert()
-        .success();
+    cmd(&temp).args(["add", "render body", "-t", "demo"]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -113,10 +110,7 @@ fn view_render_plain_and_tag_guard() {
 #[test]
 fn edit_tag_guard_blocks_mismatch() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp)
-        .args(["new", "EditMe", "body", "-t", "keep"])
-        .assert()
-        .success();
+    cmd(&temp).args(["new", "EditMe", "body", "-t", "keep"]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -142,10 +136,7 @@ fn edit_tag_guard_blocks_mismatch() {
 #[test]
 fn delete_with_tag_filter() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp)
-        .args(["add", "keep me", "-t", "keep"])
-        .assert()
-        .success();
+    cmd(&temp).args(["add", "keep me", "-t", "keep"]).assert().success();
     cmd(&temp).args(["add", "drop me"]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
@@ -166,17 +157,11 @@ fn delete_with_tag_filter() {
         }
     }
 
-    cmd(&temp)
-        .args(["delete", &drop_id, "-t", "#keep"])
-        .assert()
-        .success();
+    cmd(&temp).args(["delete", &drop_id, "-t", "#keep"]).assert().success();
     cmd(&temp).args(["view", &drop_id]).assert().success();
 
     cmd(&temp).args(["delete", &drop_id]).assert().success();
-    cmd(&temp)
-        .args(["delete", &keep_id, "-t", "#keep"])
-        .assert()
-        .success();
+    cmd(&temp).args(["delete", &keep_id, "-t", "#keep"]).assert().success();
     cmd(&temp).args(["view", &keep_id]).assert().failure();
 }
 
@@ -306,10 +291,7 @@ fn list_headers_align_to_columns() {
         &first[preview_pos..preview_pos + expected_preview.len()],
         expected_preview
     );
-    assert_eq!(
-        &first[tags_pos..tags_pos + expected_tags.len()],
-        expected_tags
-    );
+    assert_eq!(&first[tags_pos..tags_pos + expected_tags.len()], expected_tags);
 }
 
 #[test]
@@ -345,9 +327,7 @@ fn migrate_ids_renames_existing_notes() {
         .filter_map(|e| {
             let p = e.ok()?.path();
             if p.extension().and_then(|s| s.to_str()) == Some("md") {
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
+                p.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
             } else {
                 None
             }
@@ -409,13 +389,9 @@ fn pinned_tags_override_env() {
 #[test]
 fn path_and_help() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp)
-        .args(["path"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            temp.path().to_string_lossy().as_ref(),
-        ));
+    cmd(&temp).args(["path"]).assert().success().stdout(
+        predicate::str::contains(temp.path().to_string_lossy().as_ref()),
+    );
 
     cmd(&temp)
         .args(["help"])
@@ -508,15 +484,9 @@ fn delete_and_delete_all() {
         .stdout
         .clone();
     let ids: Vec<String> = list_ids(&list_out).into_iter().take(2).collect();
-    cmd(&temp)
-        .args(["delete", ids[0].as_str()])
-        .assert()
-        .success();
+    cmd(&temp).args(["delete", ids[0].as_str()]).assert().success();
     // ensure first gone
-    cmd(&temp)
-        .args(["view", ids[0].as_str()])
-        .assert()
-        .failure();
+    cmd(&temp).args(["view", ids[0].as_str()]).assert().failure();
     // delete-all removes remainder
     cmd(&temp).args(["delete-all"]).assert().success();
     let after = cmd(&temp)
@@ -563,10 +533,7 @@ fn seed_with_tags_and_list_sort() {
 #[test]
 fn seed_with_markdown_samples() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp)
-        .args(["seed", "--markdown", "-t", "md", "1"])
-        .assert()
-        .success();
+    cmd(&temp).args(["seed", "--markdown", "-t", "md", "1"]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -584,18 +551,13 @@ fn seed_with_markdown_samples() {
 #[test]
 fn view_render_preserves_lines() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp)
-        .args(["seed", "--markdown", "1"])
-        .assert()
-        .success();
+    cmd(&temp).args(["seed", "--markdown", "1"]).assert().success();
     let id = std::fs::read_dir(temp.path())
         .unwrap()
         .filter_map(|e| {
             let p = e.ok()?.path();
             if p.extension().and_then(|s| s.to_str()) == Some("md") {
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
+                p.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
             } else {
                 None
             }
@@ -633,10 +595,7 @@ fn view_render_preserves_lines() {
 #[test]
 fn tags_command_shows_pinned_and_counts() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp)
-        .args(["add", "alpha", "-t", "todo"])
-        .assert()
-        .success();
+    cmd(&temp).args(["add", "alpha", "-t", "todo"]).assert().success();
     let tags_out = cmd(&temp)
         .args(["tags"])
         .assert()

@@ -13,14 +13,8 @@ fn cmd(temp: &TempDir) -> assert_cmd::Command {
 fn completion_simulated_prefix_match() {
     let temp = TempDir::new().unwrap();
     // create two notes with nearby prefixes
-    cmd(&temp)
-        .args(["new", "Prefix A", "body"])
-        .assert()
-        .success();
-    cmd(&temp)
-        .args(["new", "Prefix B", "body"])
-        .assert()
-        .success();
+    cmd(&temp).args(["new", "Prefix A", "body"]).assert().success();
+    cmd(&temp).args(["new", "Prefix B", "body"]).assert().success();
 
     // derive ids from files and simulate prefix filtering
     let ids: Vec<String> = std::fs::read_dir(temp.path())
@@ -37,6 +31,7 @@ fn completion_simulated_prefix_match() {
     assert_eq!(ids.len(), 2);
 
     let prefix = &ids[0][..4];
-    let matches: Vec<&String> = ids.iter().filter(|id| id.starts_with(prefix)).collect();
+    let matches: Vec<&String> =
+        ids.iter().filter(|id| id.starts_with(prefix)).collect();
     assert!(!matches.is_empty());
 }

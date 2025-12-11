@@ -115,7 +115,10 @@ fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     }
     let (tags, body_parts) = split_tags(args);
     if body_parts.is_empty() {
-        return Err("Provide the note body after tags, e.g. `qn add \"text\" -t #tag`".into());
+        return Err(
+            "Provide the note body after tags, e.g. `qn add \"text\" -t #tag`"
+                .into(),
+        );
     }
     let body = body_parts.join(" ");
     let title = format!("Quick note {}", short_timestamp());
@@ -148,7 +151,9 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                 if let Some(v) = iter.next() {
                     sort_field = v;
                 } else {
-                    return Err("Provide a sort field: created|updated|size".into());
+                    return Err(
+                        "Provide a sort field: created|updated|size".into()
+                    );
                 }
             }
             "--asc" => ascending = true,
@@ -157,7 +162,9 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                 if let Some(v) = iter.next() {
                     search = Some(v);
                 } else {
-                    return Err("Provide a search string after -s/--search".into());
+                    return Err(
+                        "Provide a search string after -s/--search".into()
+                    );
                 }
             }
             "-t" | "--tag" => {
@@ -186,7 +193,8 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if let Some(q) = &search {
         let ql = q.to_lowercase();
         notes.retain(|n| {
-            n.title.to_lowercase().contains(&ql) || n.body.to_lowercase().contains(&ql)
+            n.title.to_lowercase().contains(&ql)
+                || n.body.to_lowercase().contains(&ql)
         });
     }
 
@@ -215,7 +223,8 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let use_color = env::var("NO_COLOR").is_err();
     let previews: Vec<String> = notes.iter().map(preview_line).collect();
-    let tags_plain: Vec<String> = notes.iter().map(|n| n.tags.join(" ")).collect();
+    let tags_plain: Vec<String> =
+        notes.iter().map(|n| n.tags.join(" ")).collect();
     let term_width = terminal_columns().unwrap_or(120);
     let widths = column_widths(&notes, &previews, &tags_plain, term_width);
 
@@ -227,11 +236,7 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             &n.id,
             &n.updated,
             preview,
-            if widths.include_tags {
-                Some(n.tags.as_slice())
-            } else {
-                None
-            },
+            if widths.include_tags { Some(n.tags.as_slice()) } else { None },
             &widths,
             use_color,
         );
@@ -241,11 +246,8 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn print_list_header(widths: &ColumnWidths, use_color: bool) {
-    let tags_header: Option<Vec<String>> = if widths.include_tags {
-        Some(vec!["Tags".to_string()])
-    } else {
-        None
-    };
+    let tags_header: Option<Vec<String>> =
+        if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
 
     let header = format_list_row(
         "ID",
@@ -458,10 +460,8 @@ fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
     if max_width == 1 {
         return "…".to_string();
     }
-    let mut out = text
-        .chars()
-        .take(max_width.saturating_sub(1))
-        .collect::<String>();
+    let mut out =
+        text.chars().take(max_width.saturating_sub(1)).collect::<String>();
     out.push('…');
     out
 }
@@ -473,7 +473,8 @@ struct IdState {
 }
 
 fn encode_base62(num: u64) -> String {
-    const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    const ALPHABET: &[u8] =
+        b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     if num == 0 {
         return "0".to_string();
     }
@@ -508,7 +509,11 @@ fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Box<dyn Error>> {
+fn view_note(
+    args: Vec<String>,
+    dir: &Path,
+    force_render: bool,
+) -> Result<(), Box<dyn Error>> {
     let mut args_iter = args.into_iter();
     let mut id: Option<String> = None;
     let mut render = force_render;
@@ -530,7 +535,9 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
             }
             other => {
                 if other.starts_with('-') {
-                    return Err(format!("Unknown flag for view: {other}").into());
+                    return Err(
+                        format!("Unknown flag for view: {other}").into()
+                    );
                 }
                 if id.is_none() {
                     id = Some(other.to_string());
@@ -538,7 +545,8 @@ fn view_note(args: Vec<String>, dir: &Path, force_render: bool) -> Result<(), Bo
             }
         }
     }
-    let id = id.ok_or("Usage: qn view <id> [--render|-r] [--plain] [-t <tag>]")?;
+    let id =
+        id.ok_or("Usage: qn view <id> [--render|-r] [--plain] [-t <tag>]")?;
     let use_color = !plain && env::var("NO_COLOR").is_err();
     let path = note_path(dir, &id);
     if !path.exists() {
@@ -606,7 +614,9 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             }
             other => {
                 if other.starts_with('-') {
-                    return Err(format!("Unknown flag for edit: {other}").into());
+                    return Err(
+                        format!("Unknown flag for edit: {other}").into()
+                    );
                 }
                 if id.is_none() {
                     id = Some(other.to_string());
@@ -666,7 +676,10 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     if ids.is_empty() {
         if !use_fzf && !has_fzf() {
-            return Err("Provide ids or install fzf / use --fzf for interactive delete".into());
+            return Err(
+                "Provide ids or install fzf / use --fzf for interactive delete"
+                    .into(),
+            );
         }
         let mut files = list_note_files(dir)?;
         if !tag_filters.is_empty() {
@@ -683,7 +696,9 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             return Ok(());
         }
         if !has_fzf() {
-            return Err("fzf not available; cannot launch interactive delete".into());
+            return Err(
+                "fzf not available; cannot launch interactive delete".into()
+            );
         }
 
         let input = files
@@ -761,8 +776,8 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
-    let pinned =
-        env::var("QUICK_NOTES_PINNED_TAGS").unwrap_or_else(|_| PINNED_TAGS_DEFAULT.to_string());
+    let pinned = env::var("QUICK_NOTES_PINNED_TAGS")
+        .unwrap_or_else(|_| PINNED_TAGS_DEFAULT.to_string());
     let pinned_tags: Vec<String> = pinned
         .split(',')
         .map(|t| normalize_tag(t.trim()))
@@ -776,7 +791,8 @@ fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
         last: Option<DateTime<FixedOffset>>,
     }
 
-    let mut stats: std::collections::BTreeMap<String, TagStat> = std::collections::BTreeMap::new();
+    let mut stats: std::collections::BTreeMap<String, TagStat> =
+        std::collections::BTreeMap::new();
     for (path, size) in list_note_files(dir)? {
         if let Ok(note) = parse_note(&path, size) {
             let created = parse_timestamp(&note.created);
@@ -828,7 +844,10 @@ fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
 
 fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
-        return Err("Usage: qn seed <count> [--chars N] [-t <tag> ...] [--markdown]".into());
+        return Err(
+            "Usage: qn seed <count> [--chars N] [-t <tag> ...] [--markdown]"
+                .into(),
+        );
     }
     let mut count: Option<usize> = None;
     let mut body_len: usize = 400;
@@ -839,7 +858,8 @@ fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         match arg.as_str() {
             "--chars" => {
                 if let Some(v) = iter.next() {
-                    body_len = v.parse().map_err(|_| "chars must be a number")?;
+                    body_len =
+                        v.parse().map_err(|_| "chars must be a number")?;
                 } else {
                     return Err("Provide a value for --chars".into());
                 }
@@ -859,10 +879,14 @@ fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             }
             other => {
                 if other.starts_with('-') {
-                    return Err(format!("Unknown flag for seed: {other}").into());
+                    return Err(
+                        format!("Unknown flag for seed: {other}").into()
+                    );
                 }
                 if count.is_none() {
-                    count = Some(other.parse().map_err(|_| "Count must be a number")?);
+                    count = Some(
+                        other.parse().map_err(|_| "Count must be a number")?,
+                    );
                 }
             }
         }
@@ -933,9 +957,7 @@ fn migrate_ids(dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut reserved: HashSet<String> = files
         .iter()
         .filter_map(|(p, _)| {
-            p.file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_string())
+            p.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
         })
         .collect();
     let mut moves: Vec<(PathBuf, String)> = Vec::new();
@@ -951,10 +973,7 @@ fn migrate_ids(dir: &Path) -> Result<(), Box<dyn Error>> {
         fs::rename(&old_path, &new_path)?;
         println!(
             "Migrated {} -> {}",
-            old_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or_default(),
+            old_path.file_stem().and_then(|s| s.to_str()).unwrap_or_default(),
             new_id
         );
     }
@@ -970,18 +989,17 @@ fn unique_id(dir: &Path) -> io::Result<String> {
     generate_new_id(dir, &mut HashSet::new())
 }
 
-fn generate_new_id(dir: &Path, reserved: &mut HashSet<String>) -> io::Result<String> {
+fn generate_new_id(
+    dir: &Path,
+    reserved: &mut HashSet<String>,
+) -> io::Result<String> {
     static ID_STATE: OnceLock<Mutex<IdState>> = OnceLock::new();
     let state = ID_STATE.get_or_init(|| Mutex::new(IdState::default()));
 
     let mut guard = state.lock().unwrap();
     loop {
         let now = Local::now().timestamp_micros();
-        let ts = if now <= guard.last_ts {
-            guard.last_ts + 1
-        } else {
-            now
-        };
+        let ts = if now <= guard.last_ts { guard.last_ts + 1 } else { now };
 
         if ts == guard.last_ts {
             guard.counter = guard.counter.saturating_add(1);
@@ -1071,7 +1089,10 @@ fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
 }
 
 fn short_timestamp() -> String {
-    encode_base62_width(Local::now().timestamp_micros().max(0) as u64, ID_TS_WIDTH)
+    encode_base62_width(
+        Local::now().timestamp_micros().max(0) as u64,
+        ID_TS_WIDTH,
+    )
 }
 
 fn timestamp_string() -> String {
@@ -1121,12 +1142,8 @@ fn list_note_files(dir: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
 }
 
 fn preview_line(note: &Note) -> String {
-    let first_line = note
-        .body
-        .lines()
-        .find(|l| !l.trim().is_empty())
-        .unwrap_or("")
-        .trim();
+    let first_line =
+        note.body.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
     let title = note.title.trim();
     // Suppress default auto-generated titles like "Quick note <id>" when body has content.
     let include_title = !title.to_lowercase().starts_with("quick note ");
@@ -1149,7 +1166,11 @@ fn preview_line(note: &Note) -> String {
     text
 }
 
-fn format_tags_clamped(tags: &[String], max_width: usize, use_color: bool) -> (String, usize) {
+fn format_tags_clamped(
+    tags: &[String],
+    max_width: usize,
+    use_color: bool,
+) -> (String, usize) {
     if tags.is_empty() || max_width == 0 {
         return (String::new(), 0);
     }
@@ -1330,7 +1351,8 @@ fn render_markdown(input: &str, use_color: bool) -> String {
     let mut in_code_block = false;
 
     for segment in input.split_inclusive('\n') {
-        let (line, newline) = if let Some(stripped) = segment.strip_suffix('\n') {
+        let (line, newline) = if let Some(stripped) = segment.strip_suffix('\n')
+        {
             (stripped, "\n")
         } else {
             (segment, "")
