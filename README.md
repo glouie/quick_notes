@@ -8,6 +8,8 @@ human-friendly US-local format.
 
 - Build locally: `cargo install --path .` (installs both `quick_notes` and `qn`
   binaries).
+- Install from GitHub in one step: `cargo install --git \
+  https://github.com/glouie/quick_notes.git --locked --bins`.
 - Optional convenience alias after install: `alias qn=quick_notes` (not required
   if you use the `qn` binary).
 - Default storage path: `~/.quick_notes` (override with
