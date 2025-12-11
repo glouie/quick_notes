@@ -68,23 +68,31 @@ Usage:
   qn add \"note text\"              Quick add with generated title
   qn new <title> [body...]        New note with title and optional body
   qn list [--sort <field>] [--asc|--desc] [-s|--search <text>] [-t|--tag <tag>]
-                                  List notes (sort by created|updated|size; default updated desc)
+                                  List notes (sort by created|updated|size; \
+default updated desc)
   qn view <id> [--render|-r] [--plain]
-                                  Show a note (render markdown with --render; disable color with --plain)
+                                  Show a note (render markdown with \
+--render; disable color with --plain)
   qn render <id>                  Same as: qn view <id> --render
-  qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires tag match when provided)
+  qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires \
+tag match when provided)
   qn delete [ids...] [--fzf] [-t|--tag <tag>]
-                                  Delete one or more notes (fzf multi-select when --fzf or no ids and fzf available; optional tag filter)
-  qn migrate-ids                  Regenerate note IDs to the current shorter format
+                                  Delete one or more notes (fzf multi-select \
+when --fzf or no ids and fzf available; optional tag filter)
+  qn migrate-ids                  Regenerate note IDs to the current shorter \
+format
   qn delete-all                   Delete every note in the notes directory
   qn tags                         List tags with counts and first/last use
-  qn seed <count> [--chars N]     Generate test notes (random body of N chars; default 400)
+  qn seed <count> [--chars N]     Generate test notes (random body of N chars; \
+default 400)
   qn path                         Show the notes directory
-  qn completion zsh               Print zsh completion script for fzf-powered ids
+  qn completion zsh               Print zsh completion script for fzf-powered \
+ids
   qn help                         Show this message
 
 Environment:
-  QUICK_NOTES_DIR                 Override notes directory (default: ~/.quick_notes)
+  QUICK_NOTES_DIR                 Override notes directory \
+(default: ~/.quick_notes)
 "
     );
 }
@@ -587,7 +595,8 @@ fn view_note(
             }
         } else {
             eprintln!(
-                "Hint: install `glow` for rich markdown rendering (https://github.com/charmbracelet/glow)"
+                "Hint: install `glow` for rich markdown rendering \
+(https://github.com/charmbracelet/glow)"
             );
         }
     }
@@ -1145,7 +1154,8 @@ fn preview_line(note: &Note) -> String {
     let first_line =
         note.body.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
     let title = note.title.trim();
-    // Suppress default auto-generated titles like "Quick note <id>" when body has content.
+    // Suppress default auto-generated titles like "Quick note <id>" when body
+    // has content.
     let include_title = !title.to_lowercase().starts_with("quick note ");
     let mut text = if !first_line.is_empty() {
         if include_title {
@@ -1314,7 +1324,9 @@ fn note_has_tags(note: &Note, tags: &[String]) -> bool {
 }
 
 fn generate_body(len: usize, seed: usize) -> String {
-    let base = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin aliquet, mauris nec facilisis rhoncus, nisl justo viverra dui, vitae placerat metus erat sit amet nunc. ";
+    let base = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin \
+aliquet, mauris nec facilisis rhoncus, nisl justo viverra dui, vitae placerat \
+metus erat sit amet nunc. ";
     let mut out = String::new();
     let mut n = 0;
     while out.len() < len {
@@ -1338,7 +1350,10 @@ fn generate_markdown_body(seed: usize) -> String {
 > Blockquote example {seed}\n\n\
 ---\n\n\
 Link: [example](https://example.com)\n\n\
-| Feature | Value |\n|---------|-------|\n| Seed    | {seed} |\n| Type    | Markdown |\n"
+| Feature | Value |\n\
+|---------|-------|\n\
+| Seed    | {seed} |\n\
+| Type    | Markdown |\n"
     )
 }
 

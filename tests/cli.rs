@@ -350,7 +350,8 @@ fn list_respects_terminal_width() {
         "01/01/2020 10:00 AM -00:00",
         "01/02/2020 10:00 AM -00:00",
         &["firsttag", "secondtag", "thirdtag"],
-        "This is an extremely long preview body that should be trimmed to fit within the provided terminal width for testing purposes.",
+        "This is an extremely long preview body that should be trimmed to fit \
+within the provided terminal width for testing purposes.",
     );
 
     let out = cmd(&temp)

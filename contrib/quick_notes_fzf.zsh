@@ -6,14 +6,18 @@
 # Bail out if compinit hasn't been run yet. Running it here can fight with
 # prompt/keymap hooks (e.g., starship) and spiral into FUNCNEST errors.
 if ! typeset -f _arguments >/dev/null 2>&1; then
-  [[ -o interactive ]] && print -u2 "quick_notes completion: run 'compinit' before sourcing this script."
+  if [[ -o interactive ]]; then
+    print -u2 \
+      "quick_notes completion: run 'compinit' before sourcing this script."
+  fi
   return 0 2>/dev/null || exit 0
 fi
 
 _qn() {
   local state
   _arguments -C \
-    '1:command:(add new list view render edit delete delete-all seed tags path help completion)' \
+    '1:command:(add new list view render edit delete delete-all seed tags path \
+help completion)' \
     '*:note id:_qn_note_ids'
 }
 
@@ -59,17 +63,21 @@ _qn_note_ids() {
   fi
 
   local renderer="quick_notes"
-  if ! command -v quick_notes >/dev/null 2>&1 && command -v qn >/dev/null 2>&1; then
+  if ! command -v quick_notes >/dev/null 2>&1 \
+    && command -v qn >/dev/null 2>&1; then
     renderer="qn"
   fi
 
   local preview_cmd
   if command -v bat >/dev/null 2>&1; then
-    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 bat --color=always --style=plain --language=markdown {}"
+    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 bat --color=always \
+--style=plain --language=markdown {}"
   elif command -v batcat >/dev/null 2>&1; then
-    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 batcat --color=always --style=plain --language=markdown {}"
+    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 batcat --color=always \
+--style=plain --language=markdown {}"
   else
-    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 ${renderer} render \$(basename {}) 2>/dev/null || sed -n '1,120p' {}"
+    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 ${renderer} render \
+\$(basename {}) 2>/dev/null || sed -n '1,120p' {}"
   fi
 
   local fzf_opts="--preview '${preview_cmd}' --preview-window=down:70% --ansi"
@@ -78,7 +86,11 @@ _qn_note_ids() {
   fi
 
   local selection
-  selection=$(printf '%s\n' "${files[@]}" | FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} ${fzf_opts}" fzf --query "${cur_prefix}" 2>/dev/null || true)
+  selection=$(
+    printf '%s\n' "${files[@]}" |
+      FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} ${fzf_opts}" \
+      fzf --query "${cur_prefix}" 2>/dev/null || true
+  )
   if [[ -z $selection ]]; then
     if [[ -n $cur_prefix ]]; then
       local -a matches
