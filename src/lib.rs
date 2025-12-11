@@ -573,7 +573,10 @@ fn view_note(
         }
         let header = format!(
             "===== {} ({}) =====\nCreated: {}\nUpdated: {}\n\n",
-            note.title, note.id, note.created, note.updated
+            note.title,
+            note.id,
+            format_timestamp(&note.created, use_color),
+            format_timestamp(&note.updated, use_color)
         );
 
         if render && use_color {
