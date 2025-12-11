@@ -502,6 +502,55 @@ fn seed_with_markdown_samples() {
 }
 
 #[test]
+fn view_render_preserves_lines() {
+    let temp = TempDir::new().unwrap();
+    cmd(&temp)
+        .args(["seed", "--markdown", "1"])
+        .assert()
+        .success();
+    let id = std::fs::read_dir(temp.path())
+        .unwrap()
+        .filter_map(|e| {
+            let p = e.ok()?.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("md") {
+                p.file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        })
+        .next()
+        .expect("note id");
+
+    let rendered_vec = cmd(&temp)
+        .args(["view", "-r", &id])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let rendered = String::from_utf8_lossy(&rendered_vec).to_string();
+
+    let raw = cmd(&temp)
+        .args(["view", &id])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let raw = String::from_utf8_lossy(&raw).to_string();
+
+    let raw_lines: Vec<&str> = raw.lines().collect();
+    let ren_lines: Vec<&str> = rendered.lines().collect();
+    assert_eq!(
+        raw_lines.len(),
+        ren_lines.len(),
+        "rendered output should keep same line count"
+    );
+}
+
+#[test]
 fn tags_command_shows_pinned_and_counts() {
     let temp = TempDir::new().unwrap();
     cmd(&temp)

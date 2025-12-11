@@ -1,5 +1,4 @@
 use chrono::{DateTime, FixedOffset, Local};
-use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 use std::cmp::Ordering;
 use std::env;
 use std::error::Error;
@@ -1201,92 +1200,95 @@ fn generate_markdown_body(seed: usize) -> String {
 }
 
 fn render_markdown(input: &str, use_color: bool) -> String {
-    let mut rendered = String::new();
-    let mut list_depth: usize = 0;
-    let mut in_code_block = false;
-    let mut code_lang: Option<String> = None;
-    let mut first_paragraph = true;
+    if !use_color {
+        return input.to_string();
+    }
 
-    for event in Parser::new(input) {
-        match event {
-            Event::Start(Tag::Paragraph) => {
-                if !first_paragraph {
-                    rendered.push('\n');
-                }
-                first_paragraph = false;
-            }
-            Event::End(TagEnd::Paragraph) => {
-                rendered.push('\n');
-            }
-            Event::Start(Tag::Heading { level, .. }) => {
-                rendered.push('\n');
-                let mark = match level {
-                    HeadingLevel::H1 => "# ",
-                    HeadingLevel::H2 => "## ",
-                    HeadingLevel::H3 => "### ",
-                    HeadingLevel::H4 => "#### ",
-                    HeadingLevel::H5 => "##### ",
-                    _ => "###### ",
-                };
-                push_styled(&mut rendered, mark, Style::Heading, use_color);
-            }
-            Event::End(TagEnd::Heading(_)) => rendered.push('\n'),
-            Event::Start(Tag::List(_)) => {
-                list_depth += 1;
-            }
-            Event::End(TagEnd::List(_)) => {
-                if list_depth > 0 {
-                    list_depth -= 1;
-                }
-                rendered.push('\n');
-            }
-            Event::Start(Tag::Item) => {
-                rendered.push_str(&"  ".repeat(list_depth.saturating_sub(1)));
-                push_styled(&mut rendered, "- ", Style::Bullet, use_color);
-            }
-            Event::Start(Tag::CodeBlock(kind)) => {
-                in_code_block = true;
-                code_lang = match kind {
-                    pulldown_cmark::CodeBlockKind::Fenced(info) => {
-                        let lang = info.split_whitespace().next().unwrap_or("");
-                        if lang.is_empty() {
-                            None
-                        } else {
-                            Some(lang.to_string())
-                        }
-                    }
-                    pulldown_cmark::CodeBlockKind::Indented => None,
-                };
-                rendered.push('\n');
-                let fence = match &code_lang {
-                    Some(lang) => format!("```{}\n", lang),
-                    None => "```\n".to_string(),
-                };
-                push_styled(&mut rendered, &fence, Style::Code, use_color);
-            }
-            Event::End(TagEnd::CodeBlock) => {
-                push_styled(&mut rendered, "```\n", Style::Code, use_color);
-                in_code_block = false;
-                code_lang = None;
-            }
-            Event::Text(t) | Event::Code(t) => {
-                let style = if in_code_block {
-                    Style::Code
-                } else {
-                    Style::Body
-                };
-                push_styled(&mut rendered, &t, style, use_color);
-            }
-            Event::SoftBreak | Event::HardBreak => rendered.push('\n'),
-            Event::Rule => {
-                push_styled(&mut rendered, "\n---\n", Style::Rule, use_color);
-            }
-            Event::Html(t) => rendered.push_str(&t),
-            _ => {}
+    let mut rendered = String::new();
+    let mut in_code_block = false;
+
+    for segment in input.split_inclusive('\n') {
+        let (line, newline) = if let Some(stripped) = segment.strip_suffix('\n') {
+            (stripped, "\n")
+        } else {
+            (segment, "")
+        };
+        let trimmed = line.trim_start();
+
+        if trimmed.starts_with("```") {
+            rendered.push_str(&push_painted(line, Style::Code, true));
+            rendered.push_str(newline);
+            in_code_block = !in_code_block;
+            continue;
         }
+
+        if in_code_block {
+            rendered.push_str(&push_painted(line, Style::Code, true));
+            rendered.push_str(newline);
+            continue;
+        }
+
+        let styled_line = if trimmed.starts_with('#') {
+            push_painted(line, Style::Heading, true)
+        } else if trimmed.starts_with("- ")
+            || trimmed.starts_with("* ")
+            || trimmed.starts_with("+ ")
+            || trimmed
+                .split_once('.')
+                .map(|(a, _)| a.chars().all(|c| c.is_ascii_digit()))
+                .unwrap_or(false)
+        {
+            push_painted(line, Style::Bullet, true)
+        } else if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+            push_painted(line, Style::Rule, true)
+        } else {
+            highlight_inline_code(line)
+        };
+
+        rendered.push_str(&styled_line);
+        rendered.push_str(newline);
     }
 
     rendered
+}
+
+fn highlight_inline_code(line: &str) -> String {
+    if !line.contains('`') {
+        return line.to_string();
+    }
+    let mut out = String::new();
+    let mut rest = line;
+
+    while let Some(start) = rest.find('`') {
+        let (before, after_tick) = rest.split_at(start);
+        out.push_str(before);
+        let after_tick = &after_tick[1..];
+        if let Some(end) = after_tick.find('`') {
+            let (code, after) = after_tick.split_at(end);
+            out.push('`');
+            out.push_str(&Paint::blue(code).to_string());
+            out.push('`');
+            rest = &after[1..];
+        } else {
+            out.push('`');
+            out.push_str(after_tick);
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn push_painted(text: &str, style: Style, use_color: bool) -> String {
+    if !use_color {
+        return text.to_string();
+    }
+    match style {
+        Style::Heading => Paint::cyan(text).bold().to_string(),
+        Style::Bullet => Paint::yellow(text).bold().to_string(),
+        Style::Rule => Paint::new(text).dim().to_string(),
+        Style::Code => Paint::blue(text).to_string(),
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1294,21 +1296,5 @@ enum Style {
     Heading,
     Bullet,
     Rule,
-    Body,
     Code,
-}
-
-fn push_styled(buf: &mut String, text: &str, style: Style, use_color: bool) {
-    if use_color {
-        let painted = match style {
-            Style::Heading => Paint::cyan(text).bold(),
-            Style::Bullet => Paint::yellow(text).bold(),
-            Style::Rule => Paint::new(text).dim(),
-            Style::Code => Paint::blue(text),
-            Style::Body => Paint::new(text),
-        };
-        buf.push_str(&painted.to_string());
-    } else {
-        buf.push_str(text);
-    }
 }

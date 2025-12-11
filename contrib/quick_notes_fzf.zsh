@@ -56,7 +56,16 @@ _qn_note_ids() {
     renderer="qn"
   fi
 
-  local fzf_opts="--preview 'env -u NO_COLOR CLICOLOR_FORCE=1 ${renderer} render \$(basename {}) 2>/dev/null || sed -n \"1,120p\" {}' --preview-window=down:70% --ansi"
+  local preview_cmd
+  if command -v bat >/dev/null 2>&1; then
+    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 bat --color=always --style=plain --language=markdown {}"
+  elif command -v batcat >/dev/null 2>&1; then
+    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 batcat --color=always --style=plain --language=markdown {}"
+  else
+    preview_cmd="env -u NO_COLOR CLICOLOR_FORCE=1 ${renderer} render \$(basename {}) 2>/dev/null || sed -n '1,120p' {}"
+  fi
+
+  local fzf_opts="--preview '${preview_cmd}' --preview-window=down:70% --ansi"
   if [[ ${words[2]} == delete ]]; then
     fzf_opts="$fzf_opts --multi"
   fi
@@ -71,7 +80,7 @@ _qn_note_ids() {
         compadd -- $matches
         return 0
       fi
-    }
+    fi
     return 1
   fi
   compadd -- ${(f)${selection:t:r}}

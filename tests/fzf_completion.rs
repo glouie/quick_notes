@@ -1,6 +1,4 @@
 #![allow(deprecated)]
-
-use assert_cmd::cargo::CommandCargoExt;
 use tempfile::TempDir;
 
 fn cmd(temp: &TempDir) -> assert_cmd::Command {
