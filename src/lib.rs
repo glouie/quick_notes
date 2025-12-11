@@ -523,7 +523,7 @@ fn view_note(
     force_render: bool,
 ) -> Result<(), Box<dyn Error>> {
     let mut args_iter = args.into_iter();
-    let mut id: Option<String> = None;
+    let mut ids: Vec<String> = Vec::new();
     let mut render = force_render;
     let mut plain = false;
     let mut tag_filters: Vec<String> = Vec::new();
@@ -547,67 +547,82 @@ fn view_note(
                         format!("Unknown flag for view: {other}").into()
                     );
                 }
-                if id.is_none() {
-                    id = Some(other.to_string());
-                }
+                ids.push(other.to_string());
             }
         }
     }
-    let id =
-        id.ok_or("Usage: qn view <id> [--render|-r] [--plain] [-t <tag>]")?;
+    if ids.is_empty() {
+        return Err(
+            "Usage: qn view <id>... [--render|-r] [--plain] [-t <tag>]".into(),
+        );
+    }
+
     let use_color = !plain && env::var("NO_COLOR").is_err();
-    let path = note_path(dir, &id);
-    if !path.exists() {
-        return Err(format!("Note {id} not found").into());
-    }
-    let size = fs::metadata(&path)?.len();
-    let note = parse_note(&path, size)?;
-    if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
-        return Err(format!("Note {id} does not have required tag(s)").into());
-    }
-    let body_for_output = if render {
-        render_markdown(&note.body, use_color)
-    } else {
-        note.body.clone()
-    };
-    let output = format!(
-        "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
-        note.title, note.id, note.created, note.updated, body_for_output
-    );
+    let mut errors: Vec<String> = Vec::new();
+    for (idx, id) in ids.iter().enumerate() {
+        let path = note_path(dir, &id);
+        if !path.exists() {
+            errors.push(format!("Note {id} not found"));
+            continue;
+        }
+        let size = fs::metadata(&path)?.len();
+        let note = parse_note(&path, size)?;
+        if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
+            errors.push(format!("Note {id} does not have required tag(s)"));
+            continue;
+        }
+        let header = format!(
+            "===== {} ({}) =====\nCreated: {}\nUpdated: {}\n\n",
+            note.title, note.id, note.created, note.updated
+        );
 
-    if render && use_color {
-        if let Some(colorizer) = detect_glow() {
-            // Feed raw markdown to glow so it owns styling.
-            let raw_markdown = format!(
-                "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
-                note.title, note.id, note.created, note.updated, note.body
-            );
-            let mut child = Command::new(colorizer)
-                .arg("-")
-                .stdin(Stdio::piped())
-                .spawn()?;
-            if let Some(stdin) = child.stdin.as_mut() {
-                stdin.write_all(raw_markdown.as_bytes())?;
-            }
-            let status = child.wait()?;
-            if status.success() {
-                return Ok(());
-            }
-        } else {
-            eprintln!(
-                "Hint: install `glow` for rich markdown rendering \
+        if render && use_color {
+            if let Some(colorizer) = detect_glow() {
+                let raw_markdown = format!(
+                    "# {} ({})\nCreated: {}\nUpdated: {}\n\n{}",
+                    note.title, note.id, note.created, note.updated, note.body
+                );
+                let mut child = Command::new(colorizer)
+                    .arg("-")
+                    .stdin(Stdio::piped())
+                    .spawn()?;
+                if let Some(stdin) = child.stdin.as_mut() {
+                    stdin.write_all(raw_markdown.as_bytes())?;
+                }
+                let status = child.wait()?;
+                if status.success() {
+                    if idx + 1 != ids.len() {
+                        println!();
+                    }
+                    continue;
+                }
+            } else {
+                eprintln!(
+                    "Hint: install `glow` for rich markdown rendering \
 (https://github.com/charmbracelet/glow)"
-            );
+                );
+            }
+        }
+
+        let body_for_output = if render {
+            render_markdown(&note.body, use_color)
+        } else {
+            note.body.clone()
+        };
+        print!("{header}{body_for_output}");
+        if idx + 1 != ids.len() {
+            println!();
         }
     }
-
-    print!("{output}");
+    if !errors.is_empty() {
+        return Err(errors.remove(0).into());
+    }
     Ok(())
 }
 
 fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut args_iter = args.into_iter();
-    let mut id: Option<String> = None;
+    let mut ids: Vec<String> = Vec::new();
     let mut tag_filters: Vec<String> = Vec::new();
     while let Some(arg) = args_iter.next() {
         match arg.as_str() {
@@ -627,21 +642,40 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                         format!("Unknown flag for edit: {other}").into()
                     );
                 }
-                if id.is_none() {
-                    id = Some(other.to_string());
-                }
+                ids.push(other.to_string());
             }
         }
     }
-    let id = id.ok_or("Usage: qn edit <id> [-t <tag>]")?;
-    let path = note_path(dir, &id);
-    if !path.exists() {
-        return Err(format!("Note {id} not found").into());
+    if ids.is_empty() {
+        return Err("Usage: qn edit <id>... [-t <tag>]".into());
+    }
+
+    let mut paths: Vec<(String, PathBuf)> = Vec::new();
+    for id in ids {
+        let path = note_path(dir, &id);
+        if !path.exists() {
+            eprintln!("Note {id} not found");
+            continue;
+        }
+        if !tag_filters.is_empty() {
+            let size = fs::metadata(&path)?.len();
+            if let Ok(note) = parse_note(&path, size) {
+                if !note_has_tags(&note, &tag_filters) {
+                    eprintln!("Note {id} does not have required tag(s)");
+                    continue;
+                }
+            }
+        }
+        paths.push((id, path));
+    }
+
+    if paths.is_empty() {
+        return Err("No editable notes matched the criteria".into());
     }
 
     let editor = env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
     let status = Command::new(&editor)
-        .arg(&path)
+        .args(paths.iter().map(|(_, p)| p))
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -650,14 +684,17 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Err("Editor exited with non-zero status".into());
     }
 
-    let size = fs::metadata(&path)?.len();
-    let mut note = parse_note(&path, size)?;
-    if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
-        return Err(format!("Note {id} does not have required tag(s)").into());
+    for (id, path) in paths {
+        let size = fs::metadata(&path)?.len();
+        let mut note = parse_note(&path, size)?;
+        if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
+            eprintln!("Skipped {id} (missing tag filter)");
+            continue;
+        }
+        note.updated = timestamp_string();
+        write_note(&note, dir)?;
+        println!("Updated {}", note.id);
     }
-    note.updated = timestamp_string();
-    write_note(&note, dir)?;
-    println!("Updated {}", note.id);
     Ok(())
 }
 

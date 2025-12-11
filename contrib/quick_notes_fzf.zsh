@@ -23,7 +23,8 @@ help completion)' \
 
 _qn_note_ids() {
   local cmd=${words[2]}
-  if [[ $cmd != view && $cmd != render && $cmd != edit && $cmd != delete ]]; then
+  if [[ $cmd != view && $cmd != render && $cmd != edit \
+    && $cmd != delete ]]; then
     return 1
   fi
 
@@ -81,7 +82,8 @@ _qn_note_ids() {
   fi
 
   local fzf_opts="--preview '${preview_cmd}' --preview-window=down:70% --ansi"
-  if [[ ${words[2]} == delete ]]; then
+  if [[ ${words[2]} == delete || ${words[2]} == view \
+    || ${words[2]} == render || ${words[2]} == edit ]]; then
     fzf_opts="$fzf_opts --multi"
   fi
 

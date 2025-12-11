@@ -99,7 +99,7 @@ fn view_render_plain_and_tag_guard() {
         .assert()
         .success()
         .stdout(predicate::str::contains("render body"))
-        .stdout(predicate::str::contains("#"));
+        .stdout(predicate::str::contains("====="));
 
     cmd(&temp)
         .args(["view", &id, "--render", "-t", "#missing"])
@@ -369,6 +369,76 @@ within the provided terminal width for testing purposes.",
             "line exceeds terminal width: {line}"
         );
     }
+}
+
+#[test]
+fn view_multiple_notes() {
+    let temp = TempDir::new().unwrap();
+    write_note_file(
+        temp.path(),
+        "id1",
+        "First",
+        "01/01/2020 10:00 AM -00:00",
+        "01/01/2020 10:00 AM -00:00",
+        &[],
+        "body one",
+    );
+    write_note_file(
+        temp.path(),
+        "id2",
+        "Second",
+        "01/02/2020 10:00 AM -00:00",
+        "01/02/2020 10:00 AM -00:00",
+        &[],
+        "body two",
+    );
+
+    let out = cmd(&temp)
+        .args(["view", "id1", "id2"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("===== First (id1) ====="));
+    assert!(s.contains("body one"));
+    assert!(s.contains("===== Second (id2) ====="));
+    assert!(s.contains("body two"));
+}
+
+#[test]
+fn edit_multiple_notes_updates_timestamp() {
+    let temp = TempDir::new().unwrap();
+    write_note_file(
+        temp.path(),
+        "id1",
+        "First",
+        "01/01/2020 10:00 AM -00:00",
+        "01/01/2020 10:00 AM -00:00",
+        &[],
+        "body one",
+    );
+    write_note_file(
+        temp.path(),
+        "id2",
+        "Second",
+        "01/01/2020 10:00 AM -00:00",
+        "01/01/2020 10:00 AM -00:00",
+        &[],
+        "body two",
+    );
+
+    cmd(&temp)
+        .env("EDITOR", "true")
+        .args(["edit", "id1", "id2"])
+        .assert()
+        .success();
+
+    let n1 = read_note(temp.path(), "id1");
+    let n2 = read_note(temp.path(), "id2");
+    assert!(!n1.contains("Updated: 01/01/2020 10:00 AM -00:00"));
+    assert!(!n2.contains("Updated: 01/01/2020 10:00 AM -00:00"));
 }
 
 #[test]
