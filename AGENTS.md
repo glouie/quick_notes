@@ -1,12 +1,11 @@
-AGENTS
-======
+# AGENTS
 
-Purpose
--------
+## Purpose
+
 Quick Notes is a fast, UTF-8 Rust CLI for capturing Markdown notes with creation and updated timestamps. This guide summarizes how the CLI behaves so an agent can quickly assist users.
 
-Key Commands
-------------
+## Key Commands
+
 - Binary name is `quick_notes`; users often add `alias qn=quick_notes`. Completions support both `qn` and `quick_notes`.
 - `qn add "text" [-t tag...]` — quick add with generated title and timestamp-based id (tags normalized to `#tag` form).
 - `qn new <title> [body...] [-t tag...]` — add with explicit title and optional tags.
@@ -21,11 +20,11 @@ Key Commands
 - `qn completion zsh` — emits zsh/fzf completion script (includes delete multi-select).
 - `qn path` — show the notes directory (`~/.quick_notes` by default).
 
-Storage & Format
-----------------
+## Storage & Format
+
 - Notes live in `~/.quick_notes` unless `QUICK_NOTES_DIR` is set.
 - Each note is a Markdown file with a header:
-  ```
+  ```text
   Title: ...
   Created: 12/07/2025 11:53 AM -08:00
   Updated: 12/07/2025 11:53 AM -08:00
@@ -33,8 +32,8 @@ Storage & Format
   body...
   ```
 
-Important Behaviors
--------------------
+## Important Behaviors
+
 - IDs: microsecond-based timestamps, suffixed if a collision occurs. `list` shows the id (dark gray) and timestamp (blue) followed by the preview; note content stays uncolored; tags are colored per tag hash.
 - Sorting: `list` defaults to updated desc; can sort by created/updated/size asc/desc.
 - Render: uses pulldown-cmark; `--plain` or `NO_COLOR` disables color.
@@ -43,8 +42,8 @@ Important Behaviors
 - Tags: normalized to `#tag`; stored in `Tags:` header. Tag filters work on list/view/edit/delete. Pinned tags (default `#todo,#meeting,#scratch`, override via `QUICK_NOTES_PINNED_TAGS`) remain visible in `qn tags` even if unused.
 - Search: `list -s/--search` matches substring in title/body (case-insensitive).
 
-Common Fix/Assist Tips
-----------------------
+## Common Fix/Assist Tips
+
 - Completion not working: ensure `compinit` ran; source via `source <(qn completion zsh)`; confirm `fzf` is installed for previews.
 - Notes not found: check `QUICK_NOTES_DIR`; run `qn path`.
 - Encoding issues: ensure UTF-8 editor; files are plain UTF-8 Markdown.
