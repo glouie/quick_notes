@@ -40,9 +40,23 @@ can quickly assist users.
   Title: ...
   Created: 07Dec25 11:53 -08:00
   Updated: 07Dec25 11:53 -08:00
+  Tags: #todo, #meeting
   ---
   body...
   ```
+
+## Implementation Map
+
+- Binaries: `src/main.rs` (`quick_notes`) and `src/bin/qn.rs` (`qn`) call the
+  shared library entrypoint.
+- Modules:
+  - `src/lib.rs` — CLI wiring/dispatch for commands.
+  - `src/note.rs` — note model, paths, ids, timestamps, read/write.
+  - `src/render.rs` — markdown rendering; prefers `glow` for `view -r` when
+    installed; otherwise uses internal ANSI styling.
+  - `src/table.rs` — ANSI-aware width helpers and generic table rendering used
+    in listings.
+- Completion script: `contrib/quick_notes_fzf.zsh` (fzf-powered zsh).
 
 ## Important Behaviors
 

@@ -27,6 +27,7 @@
 
 mod note;
 mod render;
+mod table;
 
 use crate::note::{
     Note, TIME_FMT, cmp_dt, ensure_dir, generate_new_id, note_path, notes_dir,
@@ -34,6 +35,9 @@ use crate::note::{
     unique_id, write_note,
 };
 use crate::render::{detect_glow, render_markdown};
+use crate::table::{
+    display_len, pad_field, render_table, truncate_with_ellipsis,
+};
 use chrono::{DateTime, FixedOffset};
 use std::collections::HashSet;
 use std::env;
@@ -495,30 +499,6 @@ fn assemble_row(
     line
 }
 
-fn pad_field(display: &str, target: usize, plain_len: usize) -> String {
-    let mut out = display.to_string();
-    let padding = target.saturating_sub(plain_len);
-    out.push_str(&" ".repeat(padding));
-    out
-}
-
-fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
-    if max_width == 0 {
-        return String::new();
-    }
-    let len = text.chars().count();
-    if len <= max_width {
-        return text.to_string();
-    }
-    if max_width == 1 {
-        return "…".to_string();
-    }
-    let mut out =
-        text.chars().take(max_width.saturating_sub(1)).collect::<String>();
-    out.push('…');
-    out
-}
-
 fn highlight_search(
     text: &str,
     query: Option<&str>,
@@ -544,31 +524,6 @@ fn highlight_search(
     }
     out.push_str(remaining);
     out
-}
-
-fn display_len(s: &str) -> usize {
-    let mut len = 0;
-    let mut chars = s.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\x1b' {
-            while let Some(next) = chars.next() {
-                if next == 'm' {
-                    break;
-                }
-            }
-            continue;
-        }
-        len += 1;
-    }
-    len
-}
-
-fn pad_ansi(text: &str, width: usize) -> String {
-    let len = display_len(text);
-    if len >= width {
-        return text.to_string();
-    }
-    format!("{}{}", text, " ".repeat(width - len))
 }
 
 fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
@@ -1112,28 +1067,16 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         rows.push((tag_label, count_display, first_display, last_display));
     }
 
-    let widths = (
-        rows.iter().map(|r| display_len(&r.0)).max().unwrap_or(0),
-        rows.iter().map(|r| display_len(&r.1)).max().unwrap_or(0),
-        rows.iter().map(|r| display_len(&r.2)).max().unwrap_or(0),
-        rows.iter().map(|r| display_len(&r.3)).max().unwrap_or(0),
-    );
-
-    for (i, row) in rows.into_iter().enumerate() {
-        let (tag, count, first, last) = row;
-        let line = format!(
-            "{} | {} | {} | {}",
-            pad_ansi(&tag, widths.0),
-            pad_ansi(&count, widths.1),
-            pad_ansi(&first, widths.2),
-            pad_ansi(&last, widths.3),
-        );
-        if i == 1 {
-            let sep_len = display_len(&line);
-            println!("{}", "=".repeat(sep_len));
-        }
-        println!("{line}");
-    }
+    let headers = vec![
+        header_color("Tag"),
+        header_color("Count"),
+        header_color(&first_label),
+        header_color(&last_label),
+    ];
+    let rows_render: Vec<Vec<String>> =
+        rows.into_iter().map(|(t, c, f, l)| vec![t, c, f, l]).collect();
+    let table = render_table(&headers, &rows_render);
+    println!("{table}");
     Ok(())
 }
 

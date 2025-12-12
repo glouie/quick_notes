@@ -59,6 +59,17 @@ markdown body...
 Releases are tracked in `CHANGELOG.md`. Update the changelog with every
 user-visible change before tagging a new version.
 
+## Architecture
+
+- Binaries: `src/main.rs` (`quick_notes`) and `src/bin/qn.rs` (`qn` symlink)
+  delegate to the shared library entrypoint.
+- Library modules:
+  - `src/lib.rs` — CLI dispatch and top-level command wiring.
+  - `src/note.rs` — note model, storage paths, ID/time helpers, read/write.
+  - `src/render.rs` — markdown rendering (ANSI) and `glow` detection.
+  - `src/table.rs` — ANSI-aware width helpers and generic table rendering.
+- Shell completion: `contrib/quick_notes_fzf.zsh` (fzf-powered zsh completion).
+
 ## Tests
 
 - Run `cargo fmt` and `cargo test` before committing changes.

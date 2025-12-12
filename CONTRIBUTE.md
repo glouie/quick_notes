@@ -13,39 +13,45 @@ explains how it is built and how to extend it.
 
 ## Architecture
 
-- Single binary (`src/main.rs`) with a thin command dispatcher and a few focused
-  helpers.
+- Binaries: `src/main.rs` (`quick_notes`) and `src/bin/qn.rs` (`qn` symlink)
+  forward to the shared library entrypoint.
+- Library modules:
+  - `src/lib.rs` — command dispatch and wiring between subcommands.
+  - `src/note.rs` — note model, storage paths, ID/time helpers, read/write.
+  - `src/render.rs` — markdown rendering (ANSI) and `glow` detection.
+  - `src/table.rs` — ANSI-aware width helpers and generic table rendering.
 - Storage: one Markdown file per note in the notes directory; each file has a
-  short header (`Title`, `Created`, `Updated`, separator line, then body).
+  short header (`Title`, `Created`, `Updated`, `Tags`, separator line, then
+  body).
 - Timestamps: generated in US-local format (`%m/%d/%Y %I:%M %p %:z`) via
   `chrono::Local`.
-- Rendering: Markdown is parsed with `pulldown-cmark` and reflowed into a
-  terminal-friendly text view (headings, lists, horizontal rules) for the
-  rendered view.
-- Editing: Opens the selected file in `$EDITOR` (fallback `vi`), then refreshes
-  the `Updated` header and rewrites the file.
+- Rendering: markdown rendered for terminal display (headings, lists, rules,
+  inline code); falls back to plain when `NO_COLOR` is set; uses `glow` when
+  available for `view -r`.
+- Editing: opens the selected file in `$EDITOR` (fallback `vi`), then re-parses
+  and rewrites to refresh the `Updated` timestamp.
 
 ## Code walkthrough (key functions)
 
-- `main` — parses the first CLI argument as a command and routes to subcommands.
+- `entry` (lib) — parses the first CLI argument as a command and routes to
+  subcommands.
 - `print_help` — prints usage, commands, and environment hints.
-- `notes_dir` — resolves the storage path from `QUICK_NOTES_DIR` or defaults to
-  `~/.quick_notes`.
-- `ensure_dir` — creates the notes directory on demand.
-- `quick_add` / `new_note` — build a `Note`, stamp timestamps, and persist.
-- `list_notes` — reads `.md` files, parses metadata, sorts by updated time, and
-  prints a summary line per note.
-- `view_note` — loads a note and prints either the raw body or the rendered
-  Markdown view (when forced or when `--render`/`-r` is passed).
+- `notes_dir`/`ensure_dir` (note) — resolve and create the storage path
+  (`~/.quick_notes` or `QUICK_NOTES_DIR`).
+- `create_note` / `write_note` / `note_path` / `unique_id` (note) — handle
+  note creation, safe file naming, and header/body serialization.
+- `parse_note` / `parse_timestamp` / `timestamp_string` (note) — read UTF-8
+  text, extract headers, and handle US-local timestamps.
+- `list_notes` — reads `.md` files, parses metadata, sorts, and renders rows
+  via shared table helpers.
+- `view_note` — prints raw or rendered markdown (respecting `--render`/`-r` and
+  `--plain`/`NO_COLOR`); uses `glow` when present.
 - `edit_note` — opens the file in an editor, then re-parses and rewrites to
-  refresh the `Updated` timestamp.
-- `create_note` / `write_note` / `note_path` / `unique_id` — handle note
-  creation, safe file naming, and header/body serialization.
-- `parse_note` — reads UTF-8 text, extracts the header, and returns a `Note`.
-- `timestamp_string` / `parse_timestamp` — generate and parse US-local
-  timestamps to sort notes correctly.
-- `render_markdown` — walks the pulldown-cmark event stream to produce a
-  readable terminal rendering of headings, lists, rules, and text.
+  refresh the `Updated` timestamp (with optional tag guard).
+- `render_markdown` / `highlight_inline_code` (render) — color headings, lists,
+  rules, inline/code fences while preserving line structure for tests.
+- `render_table` / `display_len` / `truncate_with_ellipsis` (table) — ANSI-aware
+  width and table rendering helpers used across list/tag output.
 
 ## Style and encoding
 
