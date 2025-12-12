@@ -16,6 +16,8 @@ pub struct Note {
     pub title: String,
     pub created: String,
     pub updated: String,
+    pub deleted_at: Option<String>,
+    pub archived_at: Option<String>,
     pub body: String,
     pub tags: Vec<String>,
     pub size_bytes: u64,
@@ -90,9 +92,25 @@ pub fn write_note(note: &Note, dir: &Path) -> io::Result<()> {
     } else {
         format!("Tags: {}", note.tags.join(", "))
     };
+    let deleted_line = note
+        .deleted_at
+        .as_ref()
+        .map(|d| format!("Deleted: {d}\n"))
+        .unwrap_or_default();
+    let archived_line = note
+        .archived_at
+        .as_ref()
+        .map(|d| format!("Archived: {d}\n"))
+        .unwrap_or_default();
     let content = format!(
-        "Title: {}\nCreated: {}\nUpdated: {}\n{}\n---\n{}",
-        note.title, note.created, note.updated, tags_line, body
+        "Title: {}\nCreated: {}\nUpdated: {}\n{}{}{}\n---\n{}",
+        note.title,
+        note.created,
+        note.updated,
+        deleted_line,
+        archived_line,
+        tags_line,
+        body
     );
     fs::write(note_path(dir, &note.id), content)
 }
@@ -108,6 +126,8 @@ pub fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
     let mut title = String::new();
     let mut created = String::new();
     let mut updated = String::new();
+    let mut deleted_at: Option<String> = None;
+    let mut archived_at: Option<String> = None;
     let mut tags: Vec<String> = Vec::new();
 
     for line in header.lines() {
@@ -117,6 +137,10 @@ pub fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
             created = val.trim().to_string();
         } else if let Some(val) = line.strip_prefix("Updated:") {
             updated = val.trim().to_string();
+        } else if let Some(val) = line.strip_prefix("Deleted:") {
+            deleted_at = Some(val.trim().to_string());
+        } else if let Some(val) = line.strip_prefix("Archived:") {
+            archived_at = Some(val.trim().to_string());
         } else if let Some(val) = line.strip_prefix("Tags:") {
             tags = val
                 .split(',')
@@ -135,6 +159,8 @@ pub fn parse_note(path: &Path, size_bytes: u64) -> io::Result<Note> {
         title,
         created,
         updated,
+        deleted_at,
+        archived_at,
         body: body.to_string(),
         tags,
         size_bytes,

@@ -323,9 +323,27 @@ fn list_notes_in(
     let header_preview_len = display_len(&header_preview);
     let header_tags: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
+    let created_header = widths.include_created.then(|| "Created".to_string());
+    let (moved_header, moved_rel_header) = if widths.include_moved {
+        match area {
+            Area::Trash => {
+                (Some("Deleted".to_string()), Some("Deleted (rel)".to_string()))
+            }
+            Area::Archive => (
+                Some("Archived".to_string()),
+                Some("Archived (rel)".to_string()),
+            ),
+            Area::Active => (None, None),
+        }
+    } else {
+        (None, None)
+    };
     let header = format_list_row(
         "ID",
+        created_header.as_deref(),
         &updated_label(relative_time),
+        moved_header.as_deref(),
+        moved_rel_header.as_deref(),
         &header_preview,
         header_preview_len,
         header_tags.as_deref(),
@@ -343,9 +361,31 @@ fn list_notes_in(
         let preview_len = display_len(&preview_raw);
         let preview_highlighted =
             highlight_search(&preview_raw, search.as_deref(), use_color);
+        let created = if widths.include_created {
+            Some(n.created.as_str())
+        } else {
+            None
+        };
+        let moved = if widths.include_moved {
+            match area {
+                Area::Trash => {
+                    n.deleted_at.as_deref().or_else(|| Some(n.updated.as_str()))
+                }
+                Area::Archive => n
+                    .archived_at
+                    .as_deref()
+                    .or_else(|| Some(n.updated.as_str())),
+                Area::Active => None,
+            }
+        } else {
+            None
+        };
         let line = format_list_row(
             &n.id,
+            created,
             &n.updated,
+            moved,
+            None,
             &preview_highlighted,
             preview_len,
             if widths.include_tags { Some(n.tags.as_slice()) } else { None },
@@ -365,16 +405,33 @@ fn list_notes_in(
 struct ColumnWidths {
     id: usize,
     updated: usize,
+    created: usize,
+    moved: usize,
+    moved_rel: usize,
     preview: usize,
     tags: usize,
     include_tags: bool,
+    include_created: bool,
+    include_moved: bool,
 }
 
 impl ColumnWidths {
     fn total(&self) -> usize {
-        let spaces = if self.include_tags { 9 } else { 6 };
-        let tags = if self.include_tags { self.tags } else { 0 };
-        self.id + self.updated + self.preview + tags + spaces
+        let mut spaces = 6; // id|updated|preview
+        let mut total = self.id + self.updated + self.preview;
+        if self.include_created {
+            spaces += 3;
+            total += self.created;
+        }
+        if self.include_moved {
+            spaces += 6; // two columns
+            total += self.moved + self.moved_rel;
+        }
+        if self.include_tags {
+            spaces += 3;
+            total += self.tags;
+        }
+        total + spaces
     }
 }
 
@@ -395,6 +452,65 @@ fn column_widths(
         })
         .max()
         .unwrap_or_else(|| updated_label.len().max("Updated".len()));
+    let include_created = matches!(area, Area::Trash | Area::Archive);
+    let created_label = "Created";
+    let created_width = if include_created {
+        notes
+            .iter()
+            .map(|n| {
+                format_timestamp_table(&n.created, false, now).chars().count()
+            })
+            .max()
+            .unwrap_or(0)
+            .max(created_label.len())
+    } else {
+        0
+    };
+    let include_moved = matches!(area, Area::Trash | Area::Archive);
+    let moved_label = match area {
+        Area::Trash => "Deleted",
+        Area::Archive => "Archived",
+        Area::Active => "Moved",
+    };
+    let moved_rel_label = match area {
+        Area::Trash => "Deleted (rel)",
+        Area::Archive => "Archived (rel)",
+        Area::Active => "Rel",
+    };
+    let moved_width = if include_moved {
+        notes
+            .iter()
+            .map(|n| {
+                moved_ts(area, n)
+                    .map(|ts| {
+                        display_timestamp_moved(area, ts, false, now)
+                            .chars()
+                            .count()
+                    })
+                    .unwrap_or(0)
+            })
+            .max()
+            .unwrap_or(0)
+            .max(moved_label.len())
+    } else {
+        0
+    };
+    let moved_rel_width = if include_moved {
+        notes
+            .iter()
+            .map(|n| {
+                moved_ts(area, n)
+                    .map(|ts| {
+                        display_relative_moved(area, ts, now).chars().count()
+                    })
+                    .unwrap_or(0)
+            })
+            .max()
+            .unwrap_or(0)
+            .max(moved_rel_label.len())
+    } else {
+        0
+    };
     let id_width = notes
         .iter()
         .map(|n| n.id.chars().count())
@@ -424,12 +540,17 @@ fn column_widths(
     let widths = ColumnWidths {
         id: id_width,
         updated: updated_width,
+        created: created_width,
+        moved: moved_width,
+        moved_rel: moved_rel_width,
         preview: preview_width,
         tags: tags_width,
         include_tags,
+        include_created,
+        include_moved,
     };
 
-    shrink_widths(widths, term_width, relative)
+    shrink_widths(widths, term_width, relative, area)
 }
 
 fn terminal_columns() -> Option<usize> {
@@ -468,10 +589,17 @@ fn shrink_widths(
     mut w: ColumnWidths,
     term_width: usize,
     relative: bool,
+    area: Area,
 ) -> ColumnWidths {
     let min_preview = 4;
     let min_tags = 4;
     let min_updated = updated_label(relative).len();
+    let min_created = "Created".len();
+    let (min_moved, min_moved_rel) = match area {
+        Area::Trash => ("Deleted".len(), "Deleted (rel)".len()),
+        Area::Archive => ("Archived".len(), "Archived (rel)".len()),
+        Area::Active => ("Moved".len(), "Moved (rel)".len()),
+    };
     let min_id = "ID".len();
 
     let reduce = |value: &mut usize, min: usize, excess: &mut isize| {
@@ -487,6 +615,15 @@ fn shrink_widths(
     let mut excess = w.total() as isize - term_width as isize;
     if excess > 0 {
         reduce(&mut w.preview, min_preview, &mut excess);
+    }
+    if excess > 0 && w.include_moved {
+        reduce(&mut w.moved_rel, min_moved_rel, &mut excess);
+    }
+    if excess > 0 && w.include_moved {
+        reduce(&mut w.moved, min_moved, &mut excess);
+    }
+    if excess > 0 && w.include_created {
+        reduce(&mut w.created, min_created, &mut excess);
     }
     if excess > 0 && w.include_tags {
         reduce(&mut w.tags, min_tags, &mut excess);
@@ -537,7 +674,10 @@ fn paginate_and_print(lines: &[String]) -> io::Result<()> {
 
 fn format_list_row(
     id: &str,
+    created: Option<&str>,
     updated: &str,
+    moved: Option<&str>,
+    moved_rel_override: Option<&str>,
     preview_display: &str,
     preview_len: usize,
     tags: Option<&[String]>,
@@ -551,12 +691,64 @@ fn format_list_row(
     let id_len = display_len(&id_plain);
     let id_display = format_id(&id_plain, use_color);
 
+    let (created_display, created_len) = if widths.include_created {
+        if let Some(c) = created {
+            let created_plain = truncate_with_ellipsis(
+                &format_timestamp_table(c, false, now),
+                widths.created,
+            );
+            let len = display_len(&created_plain);
+            let disp = format_timestamp(&created_plain, use_color);
+            (Some(disp), len)
+        } else {
+            (Some(String::new()), 0)
+        }
+    } else {
+        (None, 0)
+    };
+
     let updated_plain = truncate_with_ellipsis(
         &display_timestamp(area, updated, relative, now),
         widths.updated,
     );
     let updated_len = display_len(&updated_plain);
     let updated_display = format_timestamp(&updated_plain, use_color);
+
+    let (moved_display, moved_len) = if widths.include_moved {
+        if let Some(m) = moved {
+            let moved_plain = truncate_with_ellipsis(
+                &display_timestamp_moved(area, m, false, now),
+                widths.moved,
+            );
+            let len = display_len(&moved_plain);
+            let disp = format_timestamp(&moved_plain, use_color);
+            (Some(disp), len)
+        } else {
+            (Some(String::new()), 0)
+        }
+    } else {
+        (None, 0)
+    };
+
+    let (moved_rel_display, moved_rel_len) = if widths.include_moved {
+        if let Some(label) = moved_rel_override {
+            let plain = truncate_with_ellipsis(label, widths.moved_rel);
+            let len = display_len(&plain);
+            (Some(format_timestamp(&plain, use_color)), len)
+        } else if let Some(m) = moved {
+            let moved_rel_plain = truncate_with_ellipsis(
+                &display_relative_moved(area, m, now),
+                widths.moved_rel,
+            );
+            let len = display_len(&moved_rel_plain);
+            let disp = format_timestamp(&moved_rel_plain, use_color);
+            (Some(disp), len)
+        } else {
+            (Some(String::new()), 0)
+        }
+    } else {
+        (None, 0)
+    };
 
     let (tags_display, tags_len) = if widths.include_tags {
         format_tags_clamped(tags.unwrap_or(&[]), widths.tags, use_color)
@@ -567,8 +759,11 @@ fn format_list_row(
     assemble_row(
         &id_display,
         id_len,
+        created_display.as_deref().map(|s| (s, created_len)),
         &updated_display,
         updated_len,
+        moved_display.as_deref().map(|s| (s, moved_len)),
+        moved_rel_display.as_deref().map(|s| (s, moved_rel_len)),
         &preview_display,
         preview_len,
         if widths.include_tags {
@@ -583,8 +778,11 @@ fn format_list_row(
 fn assemble_row(
     id_display: &str,
     id_len: usize,
+    created_display: Option<(&str, usize)>,
     updated_display: &str,
     updated_len: usize,
+    moved_display: Option<(&str, usize)>,
+    moved_rel_display: Option<(&str, usize)>,
     preview_display: &str,
     preview_len: usize,
     tags: Option<(&str, usize)>,
@@ -593,8 +791,20 @@ fn assemble_row(
     let mut line = String::new();
     line.push_str(&pad_field(id_display, widths.id, id_len));
     line.push_str(" | ");
+    if let Some((created, len)) = created_display {
+        line.push_str(&pad_field(created, widths.created, len));
+        line.push_str(" | ");
+    }
     line.push_str(&pad_field(updated_display, widths.updated, updated_len));
     line.push_str(" | ");
+    if let Some((mv, len)) = moved_display {
+        line.push_str(&pad_field(mv, widths.moved, len));
+        line.push_str(" | ");
+    }
+    if let Some((mv_rel, len)) = moved_rel_display {
+        line.push_str(&pad_field(mv_rel, widths.moved_rel, len));
+        line.push_str(" | ");
+    }
     line.push_str(&pad_field(preview_display, widths.preview, preview_len));
     if widths.include_tags {
         line.push_str(" | ");
@@ -995,7 +1205,7 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        move_note_with_timestamp(dir, &trash_dir, &id)?;
+        move_note_with_timestamp(dir, &trash_dir, &id, Area::Trash)?;
         println!("Moved {id} to trash");
         deleted += 1;
     }
@@ -1017,7 +1227,7 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     }
     for (path, _) in files {
         if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
-            move_note_with_timestamp(dir, &trash_dir, id)?;
+            move_note_with_timestamp(dir, &trash_dir, id, Area::Trash)?;
         }
     }
     println!("Moved all notes to trash.");
@@ -1094,7 +1304,7 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             println!("Note {id} not found");
             continue;
         }
-        move_note_with_timestamp(dir, &archive_dir, &id)?;
+        move_note_with_timestamp(dir, &archive_dir, &id, Area::Archive)?;
         println!("Archived {id}");
         moved += 1;
     }
@@ -1417,6 +1627,8 @@ fn create_note(
         title,
         created: now.clone(),
         updated: now,
+        deleted_at: None,
+        archived_at: None,
         body,
         tags,
         size_bytes: 0,
@@ -1525,17 +1737,22 @@ fn restore_note(
     ensure_dir(to_dir)?;
     let mut final_id = id.to_string();
     let dst = note_path(to_dir, &final_id);
+    let size = fs::metadata(&src)?.len();
     if dst.exists() {
         let mut reserved = HashSet::new();
         let new_id = generate_new_id(to_dir, &mut reserved)?;
-        let size = fs::metadata(&src)?.len();
         let mut note = parse_note(&src, size)?;
         note.id = new_id.clone();
-        note.updated = timestamp_string();
+        note.deleted_at = None;
+        note.archived_at = None;
         write_note(&note, to_dir)?;
         fs::remove_file(src)?;
         final_id = new_id;
     } else {
+        let mut note = parse_note(&src, size)?;
+        note.deleted_at = None;
+        note.archived_at = None;
+        write_note(&note, to_dir)?;
         fs::rename(src, &dst)?;
     }
     Ok(final_id)
@@ -1545,6 +1762,7 @@ fn move_note_with_timestamp(
     from_dir: &Path,
     to_dir: &Path,
     id: &str,
+    area: Area,
 ) -> Result<(), Box<dyn Error>> {
     let src = note_path(from_dir, id);
     if !src.exists() {
@@ -1552,7 +1770,20 @@ fn move_note_with_timestamp(
     }
     let size = fs::metadata(&src)?.len();
     let mut note = parse_note(&src, size)?;
-    note.updated = timestamp_string();
+    match area {
+        Area::Trash => {
+            note.deleted_at = Some(timestamp_string());
+            note.archived_at = None;
+        }
+        Area::Archive => {
+            note.archived_at = Some(timestamp_string());
+            note.deleted_at = None;
+        }
+        Area::Active => {
+            note.deleted_at = None;
+            note.archived_at = None;
+        }
+    }
     ensure_dir(to_dir)?;
     write_note(&note, to_dir)?;
     fs::remove_file(src)?;
@@ -1792,6 +2023,38 @@ fn display_timestamp(
             };
             format!("{abs} ({rel})")
         }
+    }
+}
+
+fn display_timestamp_moved(
+    _area: Area,
+    ts: &str,
+    relative: bool,
+    now: &DateTime<FixedOffset>,
+) -> String {
+    format_timestamp_table(ts, relative, now)
+}
+
+fn display_relative_moved(
+    _area: Area,
+    ts: &str,
+    now: &DateTime<FixedOffset>,
+) -> String {
+    match parse_timestamp(ts) {
+        Some(dt) => format_relative(dt, now),
+        None => "n/a".to_string(),
+    }
+}
+
+fn moved_ts<'a>(area: Area, note: &'a Note) -> Option<&'a str> {
+    match area {
+        Area::Trash => {
+            note.deleted_at.as_deref().or_else(|| Some(note.updated.as_str()))
+        }
+        Area::Archive => {
+            note.archived_at.as_deref().or_else(|| Some(note.updated.as_str()))
+        }
+        Area::Active => None,
     }
 }
 
