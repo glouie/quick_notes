@@ -25,8 +25,9 @@ human-friendly US-local format.
 - `qn view <id>` — rendered view by default (headings, lists, rules). Add
   `--plain` or set `NO_COLOR=1` to disable color.
 - `qn edit <id> [-t tag]` — opens in `$EDITOR` (falls back to `vi`); if `fzf`
-  is installed, it uses a 70% height popup with a preview before editing, then
-  refreshes the Updated timestamp. Optional tag guard.
+  is installed, it uses a 70% height popup with preview and multi-select, then
+  opens all chosen notes together and refreshes the Updated timestamp. Optional
+  tag guard.
 - `qn delete <id> [more ids...] [-t tag]` — delete one or more notes; use
   `--fzf` or call with no ids (and fzf installed) to pick multiple notes in an
   interactive preview list; optional tag guard for safety.

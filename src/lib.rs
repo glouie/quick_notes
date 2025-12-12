@@ -703,7 +703,58 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         }
     }
     if ids.is_empty() {
-        return Err("Usage: qn edit <id>... [-t <tag>]".into());
+        if !has_fzf() {
+            return Err("Usage: qn edit <id>... [-t <tag>]".into());
+        }
+        let mut files = list_note_files(dir)?;
+        if !tag_filters.is_empty() {
+            files.retain(|(p, size)| {
+                if let Ok(note) = parse_note(p, *size) {
+                    note_has_tags(&note, &tag_filters)
+                } else {
+                    false
+                }
+            });
+        }
+        if files.is_empty() {
+            println!("No notes to edit.");
+            return Ok(());
+        }
+
+        let input = files
+            .iter()
+            .map(|(p, _)| p.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let mut child = Command::new("fzf")
+            .arg("--multi")
+            .arg("--height")
+            .arg("70%")
+            .arg("--layout")
+            .arg("reverse")
+            .arg("--preview")
+            .arg("sed -n '1,120p' {}")
+            .arg("--preview-window")
+            .arg("down:wrap")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin.write_all(input.as_bytes())?;
+        }
+        let output = child.wait_with_output()?;
+        if !output.status.success() || output.stdout.is_empty() {
+            println!("No selection made; nothing opened.");
+            return Ok(());
+        }
+        let selected_paths = String::from_utf8_lossy(&output.stdout);
+        ids = selected_paths
+            .lines()
+            .filter_map(|l| Path::new(l).file_stem()?.to_str())
+            .map(|s| s.to_string())
+            .collect();
     }
 
     let mut paths: Vec<(String, PathBuf)> = Vec::new();
@@ -1352,7 +1403,10 @@ fn preview_for_list(note: &Note, search: Option<&str>) -> String {
             .map(|(i, ch)| i + ch.len_utf8())
             .unwrap_or(note.body.len());
 
-        let mut snippet = note.body[start_byte..end_byte].trim().to_string();
+        let mut snippet = note.body[start_byte..end_byte]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         if start_byte > 0 {
             snippet = format!("… {}", snippet);
         }
