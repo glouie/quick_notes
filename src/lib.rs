@@ -1,3 +1,6 @@
+//! Core library for the Quick Notes CLI.
+//! Handles note storage, listing, rendering, and tag management.
+
 use chrono::{DateTime, FixedOffset, Local};
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -27,6 +30,7 @@ struct Note {
     size_bytes: u64,
 }
 
+/// Dispatch CLI arguments to the right subcommand.
 pub fn entry() -> Result<(), Box<dyn Error>> {
     let mut args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
@@ -117,6 +121,7 @@ fn ensure_dir(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Fast path for `qn add`, creating a note with an auto-generated title.
 fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
         return Err("Provide the note body, e.g. `qn add \"text\"`".into());
@@ -135,6 +140,7 @@ fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Handle `qn new`, creating a note with explicit title/body and tags.
 fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
         return Err("Usage: qn new <title> [body]".into());
@@ -147,6 +153,7 @@ fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// List notes with sorting, search, optional tag filters, and relative time.
 fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut sort_field = "updated".to_string();
     let mut ascending = false;
@@ -610,6 +617,7 @@ fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     }
 }
 
+/// Render or show raw notes; supports multiple ids, tag guard, and fzf.
 fn view_note(
     args: Vec<String>,
     dir: &Path,
@@ -723,6 +731,7 @@ fn view_note(
     Ok(())
 }
 
+/// Edit one or more notes, with optional tag guard and fzf multi-select.
 fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut args_iter = args.into_iter();
     let mut ids: Vec<String> = Vec::new();
@@ -852,6 +861,7 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Delete notes by id or via fzf multi-select; supports tag guards.
 fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut use_fzf = false;
     let mut ids: Vec<String> = Vec::new();
@@ -962,6 +972,7 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Remove every note in the current notes directory.
 fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     let files = list_note_files(dir)?;
     if files.is_empty() {
@@ -975,6 +986,7 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Show tags with counts and first/last usage; supports search and relative time.
 fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut search: Option<String> = None;
     let mut relative_time = false;
@@ -1160,6 +1172,7 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Generate bulk test notes with optional markdown bodies and tags.
 fn seed_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if args.is_empty() {
         return Err(
@@ -1265,6 +1278,7 @@ fn create_note(
     Ok(note)
 }
 
+/// Rewrite existing note filenames to the short incremental id scheme.
 fn migrate_ids(dir: &Path) -> Result<(), Box<dyn Error>> {
     let files = list_note_files(dir)?;
     if files.is_empty() {
