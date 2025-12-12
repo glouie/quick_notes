@@ -676,7 +676,7 @@ fn tags_command_shows_pinned_and_counts() {
         .clone();
     let tags_str = String::from_utf8_lossy(&tags_out);
     assert!(tags_str.contains("#todo"));
-    assert!(tags_str.contains("count"));
+    assert!(tags_str.to_lowercase().contains("count"));
 }
 
 #[test]

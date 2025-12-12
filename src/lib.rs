@@ -47,7 +47,7 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
         "migrate-ids" => migrate_ids(&dir)?,
         "seed" => seed_notes(args, &dir)?,
         "delete-all" => delete_all_notes(&dir)?,
-        "tags" => list_tags(&dir)?,
+        "tags" => list_tags(args, &dir)?,
         "path" => println!("{}", dir.display()),
         "completion" => print_completion(args)?,
         "help" => print_help(),
@@ -534,6 +534,31 @@ fn highlight_search(
     out
 }
 
+fn display_len(s: &str) -> usize {
+    let mut len = 0;
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' {
+            while let Some(next) = chars.next() {
+                if next == 'm' {
+                    break;
+                }
+            }
+            continue;
+        }
+        len += 1;
+    }
+    len
+}
+
+fn pad_ansi(text: &str, width: usize) -> String {
+    let len = display_len(text);
+    if len >= width {
+        return text.to_string();
+    }
+    format!("{}{}", text, " ".repeat(width - len))
+}
+
 fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let shell = args.get(0).map(|s| s.as_str()).unwrap_or("zsh");
     match shell {
@@ -852,7 +877,26 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
+fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    let mut search: Option<String> = None;
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "-s" | "--search" => {
+                if let Some(v) = iter.next() {
+                    search = Some(v);
+                } else {
+                    return Err(
+                        "Provide a search string after -s/--search".into()
+                    );
+                }
+            }
+            other => {
+                return Err(format!("Unknown flag for tags: {other}").into());
+            }
+        }
+    }
+
     let pinned = env::var("QUICK_NOTES_PINNED_TAGS")
         .unwrap_or_else(|_| PINNED_TAGS_DEFAULT.to_string());
     let pinned_tags: Vec<String> = pinned
@@ -897,13 +941,26 @@ fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
         stats.entry(tag).or_insert(TagStat::default());
     }
 
+    if let Some(q) = &search {
+        let ql = q.to_lowercase();
+        stats.retain(|tag, _| tag.to_lowercase().contains(&ql));
+    }
+
     if stats.is_empty() {
         println!("No tags found.");
         return Ok(());
     }
 
+    let use_color = env::var("NO_COLOR").is_err();
+    let mut rows: Vec<(String, String, String, String)> = Vec::new();
+    rows.push((
+        "Tag".to_string(),
+        "Count".to_string(),
+        "First".to_string(),
+        "Last".to_string(),
+    ));
+
     for (tag, stat) in stats {
-        let use_color = env::var("NO_COLOR").is_err();
         let first = stat
             .first
             .map(|d| format_timestamp(&format_dt(&d), use_color))
@@ -913,10 +970,30 @@ fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
             .map(|d| format_timestamp(&format_dt(&d), use_color))
             .unwrap_or_else(|| format_timestamp("n/a", use_color));
         let tag_label = format_tag_text(&tag, use_color);
-        println!(
-            "{:15} | count {:4} | first {} | last {}",
-            tag_label, stat.count, first, last
+        rows.push((tag_label, stat.count.to_string(), first, last));
+    }
+
+    let widths = (
+        rows.iter().map(|r| display_len(&r.0)).max().unwrap_or(0),
+        rows.iter().map(|r| display_len(&r.1)).max().unwrap_or(0),
+        rows.iter().map(|r| display_len(&r.2)).max().unwrap_or(0),
+        rows.iter().map(|r| display_len(&r.3)).max().unwrap_or(0),
+    );
+
+    for (i, row) in rows.into_iter().enumerate() {
+        let (tag, count, first, last) = row;
+        let line = format!(
+            "{} | {} | {} | {}",
+            pad_ansi(&tag, widths.0),
+            pad_ansi(&count, widths.1),
+            pad_ansi(&first, widths.2),
+            pad_ansi(&last, widths.3),
         );
+        if i == 1 {
+            let sep_len = display_len(&line);
+            println!("{}", "=".repeat(sep_len));
+        }
+        println!("{line}");
     }
     Ok(())
 }
@@ -1256,29 +1333,37 @@ fn preview_for_list(note: &Note, search: Option<&str>) -> String {
         return preview_line(note);
     }
 
-    let lines: Vec<&str> = note.body.lines().collect();
-    let first_non_empty =
-        lines.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
+    let body_lower = note.body.to_lowercase();
+    if let Some(pos) = body_lower.find(&q_lower) {
+        let start = pos.saturating_sub(20);
+        let end = (pos + q_lower.len() + 80).min(note.body.len());
+        let start_byte = note
+            .body
+            .char_indices()
+            .take_while(|(i, _)| *i < start)
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        let end_byte = note
+            .body
+            .char_indices()
+            .take_while(|(i, _)| *i <= end)
+            .last()
+            .map(|(i, ch)| i + ch.len_utf8())
+            .unwrap_or(note.body.len());
 
-    if let Some((idx, line)) = lines
-        .iter()
-        .enumerate()
-        .find(|(_, l)| l.to_lowercase().contains(&q_lower))
-    {
-        let snippet = line.trim();
-        if snippet.is_empty() {
-            return preview_line(note);
+        let mut snippet = note.body[start_byte..end_byte].trim().to_string();
+        if start_byte > 0 {
+            snippet = format!("… {}", snippet);
         }
-        let mut text = truncate_with_ellipsis(snippet, 100);
-        if idx > first_non_empty {
-            text = format!("… {}", text.trim_start());
+        if end_byte < note.body.len() {
+            snippet.push('…');
         }
         if !note.title.trim().is_empty() {
-            let combined =
-                format!("{} {}", note.title.trim(), text).trim().to_string();
-            return truncate_with_ellipsis(&combined, 100);
+            snippet =
+                format!("{} {}", note.title.trim(), snippet).trim().to_string();
         }
-        return truncate_with_ellipsis(&text, 100);
+        return truncate_with_ellipsis(&snippet, 100);
     }
 
     preview_line(note)
