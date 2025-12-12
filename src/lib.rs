@@ -152,6 +152,7 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut ascending = false;
     let mut search: Option<String> = None;
     let mut tag_filters: Vec<String> = Vec::new();
+    let mut relative_time = false;
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -174,6 +175,9 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                         "Provide a search string after -s/--search".into()
                     );
                 }
+            }
+            "-r" | "--relative" => {
+                relative_time = true;
             }
             "-t" | "--tag" => {
                 if let Some(v) = iter.next() {
@@ -229,15 +233,23 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let now = now_fixed();
     let use_color = env::var("NO_COLOR").is_err();
     let previews: Vec<String> =
         notes.iter().map(|n| preview_for_list(n, search.as_deref())).collect();
     let tags_plain: Vec<String> =
         notes.iter().map(|n| n.tags.join(" ")).collect();
     let term_width = terminal_columns().unwrap_or(120);
-    let widths = column_widths(&notes, &previews, &tags_plain, term_width);
+    let widths = column_widths(
+        &notes,
+        &previews,
+        &tags_plain,
+        term_width,
+        relative_time,
+        &now,
+    );
 
-    print_list_header(&widths, use_color);
+    print_list_header(&widths, use_color, relative_time, &now);
 
     for (idx, n) in notes.iter().enumerate() {
         let preview = &previews[idx];
@@ -250,14 +262,21 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             if widths.include_tags { Some(n.tags.as_slice()) } else { None },
             &widths,
             use_color,
+            relative_time,
+            &now,
         );
         println!("{line}");
     }
     Ok(())
 }
 
-fn print_list_header(widths: &ColumnWidths, use_color: bool) {
-    let updated_label = updated_label_with_tz();
+fn print_list_header(
+    widths: &ColumnWidths,
+    use_color: bool,
+    relative: bool,
+    now: &DateTime<FixedOffset>,
+) {
+    let updated_label = updated_label(relative);
     let tags_header: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
 
@@ -268,6 +287,8 @@ fn print_list_header(widths: &ColumnWidths, use_color: bool) {
         tags_header.as_deref(),
         widths,
         use_color,
+        relative,
+        now,
     );
     println!("{header}");
     println!("{}", "=".repeat(display_len(&header)));
@@ -295,11 +316,15 @@ fn column_widths(
     previews: &[String],
     tags_plain: &[String],
     term_width: usize,
+    relative: bool,
+    now: &DateTime<FixedOffset>,
 ) -> ColumnWidths {
-    let updated_label = updated_label_with_tz();
+    let updated_label = updated_label(relative);
     let updated_data_width = notes
         .iter()
-        .map(|n| format_timestamp_table(&n.updated).chars().count())
+        .map(|n| {
+            format_timestamp_table(&n.updated, relative, now).chars().count()
+        })
         .max()
         .unwrap_or_else(|| updated_label.len().max("Updated".len()));
     let id_width = notes
@@ -336,7 +361,7 @@ fn column_widths(
         include_tags,
     };
 
-    shrink_widths(widths, term_width)
+    shrink_widths(widths, term_width, relative)
 }
 
 fn terminal_columns() -> Option<usize> {
@@ -355,10 +380,14 @@ fn terminal_columns() -> Option<usize> {
     None
 }
 
-fn shrink_widths(mut w: ColumnWidths, term_width: usize) -> ColumnWidths {
+fn shrink_widths(
+    mut w: ColumnWidths,
+    term_width: usize,
+    relative: bool,
+) -> ColumnWidths {
     let min_preview = 4;
     let min_tags = 4;
-    let min_updated = updated_label_with_tz().len();
+    let min_updated = updated_label(relative).len();
     let min_id = "ID".len();
 
     let reduce = |value: &mut usize, min: usize, excess: &mut isize| {
@@ -395,13 +424,15 @@ fn format_list_row(
     tags: Option<&[String]>,
     widths: &ColumnWidths,
     use_color: bool,
+    relative: bool,
+    now: &DateTime<FixedOffset>,
 ) -> String {
     let id_plain = truncate_with_ellipsis(id, widths.id);
     let id_len = id_plain.chars().count();
     let id_display = format_id(&id_plain, use_color);
 
     let updated_plain = truncate_with_ellipsis(
-        &format_timestamp_table(updated),
+        &format_timestamp_table(updated, relative, now),
         widths.updated,
     );
     let updated_len = updated_plain.chars().count();
@@ -946,6 +977,7 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
 
 fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut search: Option<String> = None;
+    let mut relative_time = false;
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -957,6 +989,9 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                         "Provide a search string after -s/--search".into()
                     );
                 }
+            }
+            "-r" | "--relative" => {
+                relative_time = true;
             }
             other => {
                 return Err(format!("Unknown flag for tags: {other}").into());
@@ -1018,6 +1053,7 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let now = now_fixed();
     let use_color = env::var("NO_COLOR").is_err();
     let mut rows: Vec<(String, String, String, String)> = Vec::new();
     let header_color = |text: &str| {
@@ -1027,12 +1063,20 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             text.to_string()
         }
     };
-    let first_label = determine_tz_label()
-        .map(|t| format!("First ({t})"))
-        .unwrap_or_else(|| "First".to_string());
-    let last_label = determine_tz_label()
-        .map(|t| format!("Last ({t})"))
-        .unwrap_or_else(|| "Last".to_string());
+    let first_label = if relative_time {
+        "First (rel)".to_string()
+    } else {
+        determine_tz_label()
+            .map(|t| format!("First ({t})"))
+            .unwrap_or_else(|| "First".to_string())
+    };
+    let last_label = if relative_time {
+        "Last (rel)".to_string()
+    } else {
+        determine_tz_label()
+            .map(|t| format!("Last ({t})"))
+            .unwrap_or_else(|| "Last".to_string())
+    };
     rows.push((
         header_color("Tag"),
         header_color("Count"),
@@ -1055,11 +1099,15 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     for (tag, stat) in rows_raw {
         let first = stat
             .first
-            .map(|d| format_timestamp_table(&format_dt(&d)))
+            .map(|d| {
+                format_timestamp_table(&format_dt(&d), relative_time, &now)
+            })
             .unwrap_or_else(|| "n/a".to_string());
         let last = stat
             .last
-            .map(|d| format_timestamp_table(&format_dt(&d)))
+            .map(|d| {
+                format_timestamp_table(&format_dt(&d), relative_time, &now)
+            })
             .unwrap_or_else(|| "n/a".to_string());
 
         let is_empty = stat.count == 0;
@@ -1365,6 +1413,10 @@ fn short_timestamp() -> String {
     )
 }
 
+fn now_fixed() -> DateTime<FixedOffset> {
+    Local::now().with_timezone(Local::now().offset())
+}
+
 fn timestamp_string() -> String {
     let now = Local::now();
     now.format(TIME_FMT).to_string()
@@ -1611,11 +1663,22 @@ fn format_timestamp(ts: &str, use_color: bool) -> String {
     }
 }
 
-fn format_timestamp_table(ts: &str) -> String {
+fn format_timestamp_table(
+    ts: &str,
+    relative: bool,
+    now: &DateTime<FixedOffset>,
+) -> String {
     if let Some(dt) = parse_timestamp(ts) {
+        if relative {
+            return format_relative(dt, now);
+        }
         return dt.format("%d%b%y %H:%M").to_string();
     }
     ts.split_whitespace().take(2).collect::<Vec<_>>().join(" ")
+}
+
+fn updated_label(relative: bool) -> String {
+    if relative { "Updated (rel)".to_string() } else { updated_label_with_tz() }
 }
 
 fn updated_label_with_tz() -> String {
@@ -1626,6 +1689,42 @@ fn updated_label_with_tz() -> String {
 
 fn determine_tz_label() -> Option<String> {
     parse_timestamp(&timestamp_string()).map(|dt| dt.offset().to_string())
+}
+
+fn format_relative(
+    dt: DateTime<FixedOffset>,
+    now: &DateTime<FixedOffset>,
+) -> String {
+    let dur = now.signed_duration_since(dt);
+    let total_hours = dur.num_hours().max(0);
+    let total_days = dur.num_days().max(0);
+    if total_days < 30 {
+        if total_days == 0 {
+            return format!("{total_hours}h ago");
+        }
+        let hours = (total_hours - total_days * 24).max(0);
+        if hours > 0 {
+            format!("{total_days}d {hours}h ago")
+        } else {
+            format!("{total_days}d ago")
+        }
+    } else if total_days < 365 {
+        let months = total_days / 30;
+        let days = total_days % 30;
+        if days > 0 {
+            format!("{months}mo {days}d ago")
+        } else {
+            format!("{months}mo ago")
+        }
+    } else {
+        let years = total_days / 365;
+        let months = (total_days % 365) / 30;
+        if months > 0 {
+            format!("{years}y {months}mo ago")
+        } else {
+            format!("{years}y ago")
+        }
+    }
 }
 
 fn split_tags(args: Vec<String>) -> (Vec<String>, Vec<String>) {
