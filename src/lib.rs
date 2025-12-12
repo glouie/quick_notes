@@ -2025,15 +2025,7 @@ fn display_timestamp(
 ) -> String {
     match area {
         Area::Active => format_timestamp_table(ts, relative, now),
-        Area::Trash | Area::Archive => {
-            let abs = format_timestamp_table(ts, false, now);
-            let rel = if let Some(dt) = parse_timestamp(ts) {
-                format_relative(dt, now)
-            } else {
-                "n/a".to_string()
-            };
-            format!("{abs} ({rel})")
-        }
+        Area::Trash | Area::Archive => format_timestamp_table(ts, false, now),
     }
 }
 
