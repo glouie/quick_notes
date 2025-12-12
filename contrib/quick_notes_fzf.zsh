@@ -153,7 +153,7 @@ _qn_note_ids() {
 
   local selection
   selection=$(
-    printf '%s\n' "${files[@]}" |
+    printf '%s\n' "${stems[@]}" |
       FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS-} ${fzf_opts}" \
       fzf --query "${cur_prefix}" 2>/dev/null || true
   )
@@ -168,7 +168,7 @@ _qn_note_ids() {
     fi
     return 1
   fi
-  compadd -- ${(f)${selection:t:r}}
+  compadd -- ${(f)selection}
 }
 
 compdef _qn qn quick_notes

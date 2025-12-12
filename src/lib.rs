@@ -87,6 +87,7 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
         "seed" => seed_notes(args, &dir)?,
         "delete-all" => delete_all_notes(&dir)?,
         "tags" => list_tags(args, &dir)?,
+        "stats" => stats(&dir)?,
         "path" => println!("{}", dir.display()),
         "completion" => print_completion(args)?,
         "help" => print_help(),
@@ -104,16 +105,19 @@ fn print_help() {
         "\
 Quick Notes CLI
 Usage:
-  qn add \"note text\"              Quick add with generated title
-  qn new <title> [body...]        New note with title and optional body
+  qn add \"note text\" [-t tag...] Quick add with generated title and optional \
+tags
+  qn new <title> [body...] [-t tag...]
+                                  New note with title and optional body/tags
   qn list [--sort <field>] [--asc|--desc] [-s|--search <text>] [-t|--tag <tag>]
                                   List notes (sort by created|updated|size; \
 default updated desc)
   qn list-deleted [flags]         List soft-deleted notes (same flags as list)
   qn list-archived [flags]        List archived notes (same flags as list)
-  qn view <id> [--plain]          Show a note (rendered by default; disable \
-color with --plain)
-  qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires \
+  qn view <id>... [--plain] [-t|--tag <tag>]
+                                  Show one or more notes (rendered by default; \
+disable color with --plain)
+  qn edit <id>... [-t|--tag <tag>] Edit in $EDITOR (updates timestamp; requires \
 tag match when provided)
   qn delete [ids...] [--fzf] [-t|--tag <tag>]
                                   Soft-delete notes to trash (fzf multi-select \
@@ -125,9 +129,12 @@ when --fzf or no ids and fzf available; optional tag filter)
 conflict)
   qn migrate-ids                  Regenerate note IDs to the current shorter \
 format
-  qn tags                         List tags with counts and first/last use
-  qn seed <count> [--chars N]     Generate test notes (random body of N chars; \
+  qn tags [-s|--search text] [-r|--relative]
+                                  List tags with counts and first/last use
+  qn seed <count> [--chars N] [--markdown] [-t|--tag tag...]
+                                  Generate test notes (random body of N chars; \
 default 400)
+  qn stats                        Show totals for notes, trash, and archive
   qn path                         Show the notes directory
   qn completion zsh               Print zsh completion script for fzf-powered \
 ids
@@ -1832,6 +1839,26 @@ fn format_relative(
             format!("{years}y ago")
         }
     }
+}
+
+fn stats(dir: &Path) -> Result<(), Box<dyn Error>> {
+    let active = list_note_files(dir)?.len();
+    let trash_dir = area_dir(dir, Area::Trash);
+    let archive_dir = area_dir(dir, Area::Archive);
+    ensure_dir(&trash_dir)?;
+    ensure_dir(&archive_dir)?;
+    let trashed = list_note_files(&trash_dir)?.len();
+    let archived = list_note_files(&archive_dir)?.len();
+
+    let headers = vec!["Area".to_string(), "Count".to_string()];
+    let rows = vec![
+        vec!["Active".to_string(), active.to_string()],
+        vec!["Trash".to_string(), trashed.to_string()],
+        vec!["Archive".to_string(), archived.to_string()],
+    ];
+    let table = render_table(&headers, &rows);
+    println!("{table}");
+    Ok(())
 }
 
 fn split_tags(args: Vec<String>) -> (Vec<String>, Vec<String>) {
