@@ -332,12 +332,37 @@ fn list_notes_in(
     let header_tags: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
     let tz = determine_tz_label().unwrap_or_else(|| "TZ".to_string());
-    let created_header =
-        widths.include_created.then(|| format!("Created ({tz})"));
+    let created_header = widths.include_created.then(|| {
+        if relative_time && matches!(area, Area::Trash | Area::Archive) {
+            "Created".to_string()
+        } else {
+            format!("Created ({tz})")
+        }
+    });
     let (moved_header, moved_rel_header) = if widths.include_moved {
         match area {
-            Area::Trash => (Some(format!("Deleted ({tz})")), None::<String>),
-            Area::Archive => (Some(format!("Archived ({tz})")), None::<String>),
+            Area::Trash => {
+                let label = if relative_time { "Deleted" } else { "Deleted" };
+                (
+                    Some(
+                        format!("{label} ({tz})")
+                            .trim_end_matches(" ()")
+                            .to_string(),
+                    ),
+                    None::<String>,
+                )
+            }
+            Area::Archive => {
+                let label = if relative_time { "Archived" } else { "Archived" };
+                (
+                    Some(
+                        format!("{label} ({tz})")
+                            .trim_end_matches(" ()")
+                            .to_string(),
+                    ),
+                    None::<String>,
+                )
+            }
             Area::Active => (None, None),
         }
     } else {
@@ -458,7 +483,12 @@ fn column_widths(
         .max()
         .unwrap_or_else(|| updated_label.len().max("Updated".len()));
     let include_created = matches!(area, Area::Trash | Area::Archive);
-    let created_label = "Created";
+    let created_label =
+        if relative && matches!(area, Area::Trash | Area::Archive) {
+            "Created"
+        } else {
+            "Created (TZ)"
+        };
     let created_width = if include_created {
         notes
             .iter()
@@ -477,7 +507,6 @@ fn column_widths(
         Area::Archive => "Archived",
         Area::Active => "Moved",
     };
-    let moved_rel_label = moved_label;
     let moved_width = if include_moved {
         notes
             .iter()
@@ -514,7 +543,7 @@ fn column_widths(
     let created_width = if include_created { timestamp_width } else { 0 };
     let moved_width = if include_moved { timestamp_width } else { 0 };
     let moved_width = moved_width.max(moved_label.len());
-    let moved_rel_width = moved_rel_width.max(moved_rel_label.len());
+    let moved_rel_width = moved_rel_width.max(moved_label.len());
     let preview_width = previews
         .iter()
         .map(|p| p.chars().count())
@@ -2011,9 +2040,16 @@ fn display_timestamp(
 ) -> String {
     match area {
         Area::Active => format_timestamp_table(ts, relative, now),
-        Area::Trash | Area::Archive => {
-            format_timestamp_table(ts, relative, now)
-        }
+        Area::Trash | Area::Archive => match parse_timestamp(ts) {
+            Some(dt) => {
+                if relative {
+                    format_relative(dt, now)
+                } else {
+                    dt.format("%d%b%y %H:%M").to_string()
+                }
+            }
+            None => String::new(),
+        },
     }
 }
 
@@ -2033,7 +2069,7 @@ fn display_relative_moved(
 ) -> String {
     match parse_timestamp(ts) {
         Some(dt) => format_relative(dt, now),
-        None => "n/a".to_string(),
+        None => String::new(),
     }
 }
 
