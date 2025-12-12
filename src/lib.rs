@@ -308,8 +308,8 @@ fn column_widths(
         .max()
         .unwrap_or(0)
         .max("ID".len());
-    // Keep updated column tight to the data, truncating the header if needed.
-    let updated_width = updated_data_width.max(1);
+    // Keep updated column tight to the widest value or header.
+    let updated_width = updated_data_width.max(updated_label.len());
     let preview_width = previews
         .iter()
         .map(|p| p.chars().count())
@@ -358,7 +358,7 @@ fn terminal_columns() -> Option<usize> {
 fn shrink_widths(mut w: ColumnWidths, term_width: usize) -> ColumnWidths {
     let min_preview = 4;
     let min_tags = 4;
-    let min_updated = "Updated (TZ)".len();
+    let min_updated = updated_label_with_tz().len();
     let min_id = "ID".len();
 
     let reduce = |value: &mut usize, min: usize, excess: &mut isize| {
@@ -1027,14 +1027,17 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             text.to_string()
         }
     };
-    let tz_label = determine_tz_label()
+    let first_label = determine_tz_label()
+        .map(|t| format!("First ({t})"))
+        .unwrap_or_else(|| "First".to_string());
+    let last_label = determine_tz_label()
         .map(|t| format!("Last ({t})"))
         .unwrap_or_else(|| "Last".to_string());
     rows.push((
         header_color("Tag"),
         header_color("Count"),
-        header_color("First"),
-        header_color(&tz_label),
+        header_color(&first_label),
+        header_color(&last_label),
     ));
 
     let mut rows_raw: Vec<(String, TagStat)> = stats.into_iter().collect();
