@@ -22,10 +22,8 @@ human-friendly US-local format.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s|--search text]
   [-t|--tag tag]` — show ids with updated timestamp and a preview (default sort:
   updated desc).
-- `qn view <id>` — print the note plus header.
-- `qn view <id> --render` or `qn render <id>` — render Markdown in the terminal
-  (headings, lists, rules) for quick reading. Add `--plain` or set `NO_COLOR=1`
-  to disable color.
+- `qn view <id>` — rendered view by default (headings, lists, rules). Add
+  `--plain` or set `NO_COLOR=1` to disable color.
 - `qn edit <id> [-t tag]` — opens in `$EDITOR` (falls back to `vi`); if `fzf`
   is installed, it uses a 70% height popup with a preview before editing, then
   refreshes the Updated timestamp. Optional tag guard.

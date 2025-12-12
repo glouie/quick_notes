@@ -40,7 +40,7 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
         "add" => quick_add(args, &dir)?,
         "new" => new_note(args, &dir)?,
         "list" => list_notes(args, &dir)?,
-        "view" => view_note(args, &dir, false)?,
+        "view" => view_note(args, &dir, true)?,
         "render" => view_note(args, &dir, true)?,
         "edit" => edit_note(args, &dir)?,
         "delete" => delete_notes(args, &dir)?,
@@ -70,9 +70,8 @@ Usage:
   qn list [--sort <field>] [--asc|--desc] [-s|--search <text>] [-t|--tag <tag>]
                                   List notes (sort by created|updated|size; \
 default updated desc)
-  qn view <id> [--render|-r] [--plain]
-                                  Show a note (render markdown with \
---render; disable color with --plain)
+  qn view <id> [--plain]          Show a note (rendered by default; disable \
+color with --plain)
   qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires \
 tag match when provided)
   qn delete [ids...] [--fzf] [-t|--tag <tag>]
@@ -229,7 +228,8 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     let use_color = env::var("NO_COLOR").is_err();
-    let previews: Vec<String> = notes.iter().map(preview_line).collect();
+    let previews: Vec<String> =
+        notes.iter().map(|n| preview_for_list(n, search.as_deref())).collect();
     let tags_plain: Vec<String> =
         notes.iter().map(|n| n.tags.join(" ")).collect();
     let term_width = terminal_columns().unwrap_or(120);
@@ -903,17 +903,19 @@ fn list_tags(dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     for (tag, stat) in stats {
+        let use_color = env::var("NO_COLOR").is_err();
         let first = stat
             .first
-            .map(|d| d.to_rfc3339())
-            .unwrap_or_else(|| "n/a".to_string());
+            .map(|d| format_timestamp(&format_dt(&d), use_color))
+            .unwrap_or_else(|| format_timestamp("n/a", use_color));
         let last = stat
             .last
-            .map(|d| d.to_rfc3339())
-            .unwrap_or_else(|| "n/a".to_string());
+            .map(|d| format_timestamp(&format_dt(&d), use_color))
+            .unwrap_or_else(|| format_timestamp("n/a", use_color));
+        let tag_label = format_tag_text(&tag, use_color);
         println!(
             "{:15} | count {:4} | first {} | last {}",
-            tag, stat.count, first, last
+            tag_label, stat.count, first, last
         );
     }
     Ok(())
@@ -1244,6 +1246,44 @@ fn preview_line(note: &Note) -> String {
     text
 }
 
+fn preview_for_list(note: &Note, search: Option<&str>) -> String {
+    let Some(q) = search else { return preview_line(note) };
+    if q.is_empty() {
+        return preview_line(note);
+    }
+    let q_lower = q.to_lowercase();
+    if note.title.to_lowercase().contains(&q_lower) {
+        return preview_line(note);
+    }
+
+    let lines: Vec<&str> = note.body.lines().collect();
+    let first_non_empty =
+        lines.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
+
+    if let Some((idx, line)) = lines
+        .iter()
+        .enumerate()
+        .find(|(_, l)| l.to_lowercase().contains(&q_lower))
+    {
+        let snippet = line.trim();
+        if snippet.is_empty() {
+            return preview_line(note);
+        }
+        let mut text = truncate_with_ellipsis(snippet, 100);
+        if idx > first_non_empty {
+            text = format!("… {}", text.trim_start());
+        }
+        if !note.title.trim().is_empty() {
+            let combined =
+                format!("{} {}", note.title.trim(), text).trim().to_string();
+            return truncate_with_ellipsis(&combined, 100);
+        }
+        return truncate_with_ellipsis(&text, 100);
+    }
+
+    preview_line(note)
+}
+
 fn format_tags_clamped(
     tags: &[String],
     max_width: usize,
@@ -1290,6 +1330,10 @@ fn format_tag_text(tag: &str, use_color: bool) -> String {
     } else {
         tag.to_string()
     }
+}
+
+fn format_dt(dt: &DateTime<FixedOffset>) -> String {
+    dt.format("%m/%d/%Y %I:%M %p %:z").to_string()
 }
 
 fn color_for_tag(tag: &str) -> (u8, u8, u8) {

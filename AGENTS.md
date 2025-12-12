@@ -16,8 +16,8 @@ can quickly assist users.
   tags.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag]`
   — list notes with compact previews; search across title/body; filter by tag.
-- `qn view <id> [--render|-r] [--plain] [-t tag]` — show raw or rendered
-  Markdown; optional tag guard.
+- `qn view <id> [--plain] [-t tag]` — show rendered Markdown by default;
+  optional tag guard; `--plain` disables color.
 - `qn render <id>` — shortcut to rendered view.
 - `qn edit <id> [-t tag]` — edit in `$EDITOR`; if `fzf` exists, uses a ~70%
   popup with preview; optional tag guard.

@@ -21,7 +21,7 @@ explains how it is built and how to extend it.
   `chrono::Local`.
 - Rendering: Markdown is parsed with `pulldown-cmark` and reflowed into a
   terminal-friendly text view (headings, lists, horizontal rules) for the
-  `render`/`view --render` mode.
+  rendered view.
 - Editing: Opens the selected file in `$EDITOR` (fallback `vi`), then refreshes
   the `Updated` header and rewrites the file.
 
