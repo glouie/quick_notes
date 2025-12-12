@@ -148,22 +148,30 @@ Environment:
     );
 }
 
-/// Fast path for `qn add`, creating a note with an auto-generated title.
+/// Append text to an existing note (requires an id).
 fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
-    if args.is_empty() {
-        return Err("Provide the note body, e.g. `qn add \"text\"`".into());
+    if args.len() < 2 {
+        return Err("Usage: qn add <id> \"text to append\"".into());
     }
-    let (tags, body_parts) = split_tags(args);
-    if body_parts.is_empty() {
-        return Err(
-            "Provide the note body after tags, e.g. `qn add \"text\" -t #tag`"
-                .into(),
-        );
+    let id = args[0].clone();
+    let text = args[1..].join(" ");
+    if text.trim().is_empty() {
+        return Err("Provide text to append".into());
     }
-    let body = body_parts.join(" ");
-    let title = format!("Quick note {}", short_timestamp());
-    let note = create_note_with_tags(title, body, tags, dir)?;
-    println!("Added note {} ({})", note.id, note.title);
+    let path = note_path(dir, &id);
+    if !path.exists() {
+        return Err(format!("Note {id} not found").into());
+    }
+    let size = fs::metadata(&path)?.len();
+    let mut note = parse_note(&path, size)?;
+    if !note.body.ends_with('\n') {
+        note.body.push('\n');
+    }
+    note.body.push_str(text.trim());
+    note.body.push('\n');
+    note.updated = timestamp_string();
+    write_note(&note, dir)?;
+    println!("Appended to {id}");
     Ok(())
 }
 

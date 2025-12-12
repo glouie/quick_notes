@@ -87,7 +87,10 @@ fn first_list_id(output: &[u8]) -> String {
 #[test]
 fn view_render_plain_and_tag_guard() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp).args(["add", "render body", "-t", "demo"]).assert().success();
+    cmd(&temp)
+        .args(["new", "render body", "", "-t", "demo"])
+        .assert()
+        .success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -139,8 +142,8 @@ fn edit_tag_guard_blocks_mismatch() {
 #[test]
 fn delete_with_tag_filter() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp).args(["add", "keep me", "-t", "keep"]).assert().success();
-    cmd(&temp).args(["add", "drop me"]).assert().success();
+    cmd(&temp).args(["new", "keep me", "", "-t", "keep"]).assert().success();
+    cmd(&temp).args(["new", "drop me", "", "-t", "tmp"]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -224,14 +227,14 @@ fn list_sort_created_updated_size() {
 fn ids_are_short_and_incremental() {
     let temp = TempDir::new().unwrap();
     let first_out = cmd(&temp)
-        .args(["add", "one"])
+        .args(["new", "one", ""])
         .assert()
         .success()
         .get_output()
         .stdout
         .clone();
     let second_out = cmd(&temp)
-        .args(["add", "two"])
+        .args(["new", "two", ""])
         .assert()
         .success()
         .get_output()
@@ -474,8 +477,8 @@ fn path_and_help() {
 #[test]
 fn add_and_list_and_view() {
     let temp = TempDir::new().unwrap();
-    // add
-    cmd(&temp).args(["add", "hello world"]).assert().success();
+    // create
+    cmd(&temp).args(["new", "Hello", "hello world"]).assert().success();
     // list
     let output = cmd(&temp)
         .args(["list"])
@@ -493,6 +496,26 @@ fn add_and_list_and_view() {
         .assert()
         .success()
         .stdout(predicate::str::contains("hello world"));
+}
+
+#[test]
+fn add_appends_to_existing_note() {
+    let temp = TempDir::new().unwrap();
+    cmd(&temp).args(["new", "Append Me", "first line"]).assert().success();
+    let list_out = cmd(&temp)
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let id = first_list_id(&list_out);
+    let before = read_note(temp.path(), &id);
+    cmd(&temp).args(["add", &id, "second line"]).assert().success();
+    let after = read_note(temp.path(), &id);
+    assert!(after.contains("first line"));
+    assert!(after.contains("second line"));
+    assert_ne!(before, after);
 }
 
 #[test]
@@ -545,8 +568,8 @@ fn new_with_tags_and_search_filter() {
 #[test]
 fn delete_and_delete_all() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp).args(["add", "one"]).assert().success();
-    cmd(&temp).args(["add", "two"]).assert().success();
+    cmd(&temp).args(["new", "one", ""]).assert().success();
+    cmd(&temp).args(["new", "two", ""]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -584,7 +607,7 @@ fn delete_and_delete_all() {
 #[test]
 fn soft_delete_and_undelete() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp).args(["add", "temp note"]).assert().success();
+    cmd(&temp).args(["new", "temp note", ""]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -610,7 +633,7 @@ fn soft_delete_and_undelete() {
 #[test]
 fn archive_and_unarchive() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp).args(["add", "keep me"]).assert().success();
+    cmd(&temp).args(["new", "keep me", ""]).assert().success();
     let list_out = cmd(&temp)
         .args(["list"])
         .assert()
@@ -729,7 +752,7 @@ fn view_render_preserves_lines() {
 #[test]
 fn tags_command_shows_pinned_and_counts() {
     let temp = TempDir::new().unwrap();
-    cmd(&temp).args(["add", "alpha", "-t", "todo"]).assert().success();
+    cmd(&temp).args(["new", "alpha", "", "-t", "todo"]).assert().success();
     let tags_out = cmd(&temp)
         .args(["tags"])
         .assert()

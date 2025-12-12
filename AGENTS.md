@@ -10,8 +10,8 @@ can quickly assist users.
 
 - Binary name is `quick_notes`; users often add `alias qn=quick_notes`.
   Completions support both `qn` and `quick_notes`.
-- `qn add "text" [-t tag...]` — quick add with generated title and
-  timestamp-based id (tags normalized to `#tag` form).
+- `qn add <id> "text"` — append text to an existing note (fzf completion for
+  ids).
 - `qn new <title> [body...] [-t tag...]` — add with explicit title and optional
   tags.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag]`

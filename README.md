@@ -17,7 +17,8 @@ human-friendly US-local format.
 
 ## Usage
 
-- `qn add "note text"` — fast path; title is generated automatically.
+- `qn add <id> "note text"` — append text to an existing note (id completion via
+  fzf).
 - `qn new "Title" [body...]` — create with explicit title and optional body.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s|--search text]
   [-t|--tag tag]` — show ids with updated timestamp and a preview (default sort:
@@ -81,8 +82,8 @@ user-visible change before tagging a new version.
 
 ## Tips
 
-- Create a keyboard shortcut that runs `qn add "$(pbpaste)"` or `qn add "text"`
-  in your shell/launcher for super-fast capture.
+- Create a keyboard shortcut that runs `qn add <id> "$(pbpaste)"` in your
+  shell/launcher for super-fast append (fzf helps pick ids).
 - Sync `~/.quick_notes` with cloud storage by pointing `QUICK_NOTES_DIR` to a
   synced folder.
 - Notes are UTF-8; keep your editor configured for UTF-8 to avoid encoding
@@ -90,7 +91,7 @@ user-visible change before tagging a new version.
 - Example zsh key binding for instant capture from the clipboard:
   - Add to `~/.zshrc`:
     ```zsh
-    function qnclip() { qn add "$(pbpaste)"; }
+    function qnclip() { qn add <id> "$(pbpaste)"; }
     zle -N qnclip
     bindkey '^q' qnclip
     ```
@@ -105,8 +106,7 @@ user-visible change before tagging a new version.
   - If completion fails with prompt/keymap errors, double-check that `compinit`
     runs before sourcing the script.
 - Tags:
-  - Add tags on creation with `-t/--tag`, e.g., `qn add "text" -t todo -t
-    #meeting`.
+  - Append quickly with `qn add <id> "text"`; use completion/fzf for the id.
   - Filter `list`/`view`/`edit`/`delete` by tag using `-t/--tag`.
   - List all tags with `qn tags`; pinned tags default to
     `#todo,#meeting,#scratch` (override with
