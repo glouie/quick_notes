@@ -519,6 +519,12 @@ fn column_widths(
     } else {
         0
     };
+    let timestamp_width = updated_data_width
+        .max(created_width)
+        .max(moved_width)
+        .max(updated_label.len())
+        .max(created_label.len())
+        .max(moved_label.len());
     let id_width = notes
         .iter()
         .map(|n| n.id.chars().count())
@@ -526,7 +532,9 @@ fn column_widths(
         .unwrap_or(0)
         .max("ID".len());
     // Keep updated column tight to the widest value or header.
-    let updated_width = updated_data_width.max(updated_label.len());
+    let updated_width = timestamp_width;
+    let created_width = if include_created { timestamp_width } else { 0 };
+    let moved_width = if include_moved { timestamp_width } else { 0 };
     let moved_width = moved_width.max(moved_label.len());
     let moved_rel_width = moved_rel_width.max(moved_rel_label.len());
     let preview_width = previews
@@ -2025,7 +2033,9 @@ fn display_timestamp(
 ) -> String {
     match area {
         Area::Active => format_timestamp_table(ts, relative, now),
-        Area::Trash | Area::Archive => format_timestamp_table(ts, false, now),
+        Area::Trash | Area::Archive => {
+            format_timestamp_table(ts, relative, now)
+        }
     }
 }
 
