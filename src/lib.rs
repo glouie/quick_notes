@@ -477,7 +477,7 @@ fn column_widths(
         Area::Archive => "Archived",
         Area::Active => "Moved",
     };
-    let moved_rel_label = moved_label.clone();
+    let moved_rel_label = moved_label;
     let moved_width = if include_moved {
         notes
             .iter()
