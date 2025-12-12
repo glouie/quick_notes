@@ -556,9 +556,9 @@ fn delete_and_delete_all() {
         .clone();
     let ids: Vec<String> = list_ids(&list_out).into_iter().take(2).collect();
     cmd(&temp).args(["delete", ids[0].as_str()]).assert().success();
-    // ensure first gone
+    // ensure first gone from active list
     cmd(&temp).args(["view", ids[0].as_str()]).assert().failure();
-    // delete-all removes remainder
+    // delete-all moves remainder to trash
     cmd(&temp).args(["delete-all"]).assert().success();
     let after = cmd(&temp)
         .args(["list"])
@@ -568,6 +568,69 @@ fn delete_and_delete_all() {
         .stdout
         .clone();
     assert!(String::from_utf8_lossy(&after).contains("No notes yet"));
+    // trash should contain both ids
+    let trash_list = cmd(&temp)
+        .args(["list-deleted"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let trash_ids = list_ids(&trash_list);
+    assert!(trash_ids.contains(&ids[0]));
+    assert!(trash_ids.contains(&ids[1]));
+}
+
+#[test]
+fn soft_delete_and_undelete() {
+    let temp = TempDir::new().unwrap();
+    cmd(&temp).args(["add", "temp note"]).assert().success();
+    let list_out = cmd(&temp)
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let id = first_list_id(&list_out);
+    cmd(&temp).args(["delete", &id]).assert().success();
+    cmd(&temp).args(["view", &id]).assert().failure();
+    let trash = cmd(&temp)
+        .args(["list-deleted"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(String::from_utf8_lossy(&trash).contains(&id));
+    cmd(&temp).args(["undelete", &id]).assert().success();
+    cmd(&temp).args(["view", &id]).assert().success();
+}
+
+#[test]
+fn archive_and_unarchive() {
+    let temp = TempDir::new().unwrap();
+    cmd(&temp).args(["add", "keep me"]).assert().success();
+    let list_out = cmd(&temp)
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let id = first_list_id(&list_out);
+    cmd(&temp).args(["archive", &id]).assert().success();
+    cmd(&temp).args(["view", &id]).assert().failure();
+    let archived = cmd(&temp)
+        .args(["list-archived"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(String::from_utf8_lossy(&archived).contains(&id));
+    cmd(&temp).args(["unarchive", &id]).assert().success();
+    cmd(&temp).args(["view", &id]).assert().success();
 }
 
 #[test]

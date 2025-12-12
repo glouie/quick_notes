@@ -29,6 +29,13 @@ mod note;
 mod render;
 mod table;
 
+#[derive(Clone, Copy)]
+enum Area {
+    Active,
+    Trash,
+    Archive,
+}
+
 use crate::note::{
     Note, TIME_FMT, cmp_dt, ensure_dir, generate_new_id, note_path, notes_dir,
     now_fixed, parse_note, parse_timestamp, short_timestamp, timestamp_string,
@@ -43,10 +50,10 @@ use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use terminal_size::{Width, terminal_size};
+use terminal_size::{Height, Width, terminal_size};
 use yansi::Paint;
 
 const PINNED_TAGS_DEFAULT: &str = "#todo,#meeting,#scratch";
@@ -71,6 +78,11 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
         "render" => view_note(args, &dir, true)?,
         "edit" => edit_note(args, &dir)?,
         "delete" => delete_notes(args, &dir)?,
+        "list-deleted" => list_deleted(args, &dir)?,
+        "list-archived" => list_archived(args, &dir)?,
+        "archive" => archive_notes(args, &dir)?,
+        "undelete" => undelete_notes(args, &dir)?,
+        "unarchive" => unarchive_notes(args, &dir)?,
         "migrate-ids" => migrate_ids(&dir)?,
         "seed" => seed_notes(args, &dir)?,
         "delete-all" => delete_all_notes(&dir)?,
@@ -97,16 +109,22 @@ Usage:
   qn list [--sort <field>] [--asc|--desc] [-s|--search <text>] [-t|--tag <tag>]
                                   List notes (sort by created|updated|size; \
 default updated desc)
+  qn list-deleted [flags]         List soft-deleted notes (same flags as list)
+  qn list-archived [flags]        List archived notes (same flags as list)
   qn view <id> [--plain]          Show a note (rendered by default; disable \
 color with --plain)
   qn edit <id> [-t|--tag <tag>]   Edit in $EDITOR (updates timestamp; requires \
 tag match when provided)
   qn delete [ids...] [--fzf] [-t|--tag <tag>]
-                                  Delete one or more notes (fzf multi-select \
+                                  Soft-delete notes to trash (fzf multi-select \
 when --fzf or no ids and fzf available; optional tag filter)
+  qn delete-all                   Soft-delete every note to trash
+  qn archive [ids...] [--fzf]     Archive notes (kept indefinitely)
+  qn undelete <ids...>            Restore notes from trash (renames on conflict)
+  qn unarchive <ids...>           Restore notes from archive (renames on \
+conflict)
   qn migrate-ids                  Regenerate note IDs to the current shorter \
 format
-  qn delete-all                   Delete every note in the notes directory
   qn tags                         List tags with counts and first/last use
   qn seed <count> [--chars N]     Generate test notes (random body of N chars; \
 default 400)
@@ -118,6 +136,7 @@ ids
 Environment:
   QUICK_NOTES_DIR                 Override notes directory \
 (default: ~/.quick_notes)
+  QUICK_NOTES_TRASH_RETENTION_DAYS  Days to keep trashed notes (default 30)
 "
     );
 }
@@ -155,7 +174,31 @@ fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 /// List notes with sorting, search, optional tag filters, and relative time.
+fn area_dir(base: &Path, area: Area) -> PathBuf {
+    match area {
+        Area::Active => base.to_path_buf(),
+        Area::Trash => base.join("trash"),
+        Area::Archive => base.join("archive"),
+    }
+}
+
 fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    list_notes_in(args, dir, Area::Active)
+}
+
+fn list_deleted(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    list_notes_in(args, &area_dir(dir, Area::Trash), Area::Trash)
+}
+
+fn list_archived(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    list_notes_in(args, &area_dir(dir, Area::Archive), Area::Archive)
+}
+
+fn list_notes_in(
+    args: Vec<String>,
+    dir: &Path,
+    area: Area,
+) -> Result<(), Box<dyn Error>> {
     let mut sort_field = "updated".to_string();
     let mut ascending = false;
     let mut search: Option<String> = None;
@@ -203,6 +246,11 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         }
     }
 
+    ensure_dir(dir)?;
+    if let Area::Trash = area {
+        let _ = clean_trash(dir);
+    }
+
     let mut notes: Vec<Note> = Vec::new();
     for (path, size) in list_note_files(dir)? {
         if let Ok(note) = parse_note(&path, size) {
@@ -237,7 +285,11 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     });
 
     if notes.is_empty() {
-        println!("No notes yet. Try `qn add \"text\"`.");
+        match area {
+            Area::Active => println!("No notes yet. Try `qn add \"text\"`."),
+            Area::Trash => println!("No deleted notes."),
+            Area::Archive => println!("No archived notes."),
+        }
         return Ok(());
     }
 
@@ -257,8 +309,25 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         &now,
     );
 
-    print_list_header(&widths, use_color, relative_time, &now);
-
+    let mut lines: Vec<String> = Vec::new();
+    let header_preview =
+        truncate_with_ellipsis("Preview", widths.preview).to_string();
+    let header_preview_len = display_len(&header_preview);
+    let header_tags: Option<Vec<String>> =
+        if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
+    let header = format_list_row(
+        "ID",
+        &updated_label(relative_time),
+        &header_preview,
+        header_preview_len,
+        header_tags.as_deref(),
+        &widths,
+        use_color,
+        relative_time,
+        &now,
+    );
+    lines.push(header.clone());
+    lines.push("=".repeat(display_len(&header)));
     for (idx, n) in notes.iter().enumerate() {
         let preview_raw =
             truncate_with_ellipsis(&previews[idx], widths.preview);
@@ -276,37 +345,10 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             relative_time,
             &now,
         );
-        println!("{line}");
+        lines.push(line);
     }
+    paginate_and_print(&lines)?;
     Ok(())
-}
-
-fn print_list_header(
-    widths: &ColumnWidths,
-    use_color: bool,
-    relative: bool,
-    now: &DateTime<FixedOffset>,
-) {
-    let updated_label = updated_label(relative);
-    let tags_header: Option<Vec<String>> =
-        if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
-
-    let header_preview =
-        truncate_with_ellipsis("Preview", widths.preview).to_string();
-    let header_preview_len = display_len(&header_preview);
-    let header = format_list_row(
-        "ID",
-        &updated_label,
-        &header_preview,
-        header_preview_len,
-        tags_header.as_deref(),
-        widths,
-        use_color,
-        relative,
-        now,
-    );
-    println!("{header}");
-    println!("{}", "=".repeat(display_len(&header)));
 }
 
 #[derive(Debug)]
@@ -395,6 +437,22 @@ fn terminal_columns() -> Option<usize> {
     None
 }
 
+fn terminal_rows() -> Option<usize> {
+    if let Ok(rows) = env::var("ROWS") {
+        if let Ok(v) = rows.parse::<usize>() {
+            if v > 0 {
+                return Some(v);
+            }
+        }
+    }
+    if let Some((_, Height(h))) = terminal_size() {
+        if h > 0 {
+            return Some(h as usize);
+        }
+    }
+    None
+}
+
 fn shrink_widths(
     mut w: ColumnWidths,
     term_width: usize,
@@ -430,6 +488,40 @@ fn shrink_widths(
     }
 
     w
+}
+
+fn paginate_and_print(lines: &[String]) -> io::Result<()> {
+    if !io::stdout().is_terminal() {
+        for l in lines {
+            println!("{l}");
+        }
+        return Ok(());
+    }
+
+    let rows = terminal_rows().unwrap_or(usize::MAX);
+    if rows == usize::MAX || rows == 0 {
+        for l in lines {
+            println!("{l}");
+        }
+        return Ok(());
+    }
+
+    let page = rows.saturating_sub(2).max(1);
+    let mut idx = 0;
+    while idx < lines.len() {
+        let end = (idx + page).min(lines.len());
+        for l in &lines[idx..end] {
+            println!("{l}");
+        }
+        idx = end;
+        if idx < lines.len() {
+            print!("-- more -- press Enter to continue --");
+            io::stdout().flush()?;
+            let mut buf = String::new();
+            io::stdin().read_line(&mut buf)?;
+        }
+    }
+    Ok(())
 }
 
 fn format_list_row(
@@ -791,6 +883,7 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut use_fzf = false;
     let mut ids: Vec<String> = Vec::new();
     let mut tag_filters: Vec<String> = Vec::new();
+    let trash_dir = area_dir(dir, Area::Trash);
     let mut iter = args.into_iter();
     while let Some(a) = iter.next() {
         if a == "--fzf" {
@@ -808,6 +901,9 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             ids.push(a);
         }
     }
+
+    ensure_dir(&trash_dir)?;
+    clean_trash(&trash_dir)?;
 
     if ids.is_empty() {
         if !use_fzf && !has_fzf() {
@@ -874,22 +970,22 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut deleted = 0;
     for id in ids {
         let path = note_path(dir, &id);
-        if path.exists() {
-            if !tag_filters.is_empty() {
-                let size = fs::metadata(&path)?.len();
-                if let Ok(note) = parse_note(&path, size) {
-                    if !note_has_tags(&note, &tag_filters) {
-                        println!("Skipped {id} (missing tag filter)");
-                        continue;
-                    }
+        if !path.exists() {
+            println!("Note {id} not found");
+            continue;
+        }
+        if !tag_filters.is_empty() {
+            let size = fs::metadata(&path)?.len();
+            if let Ok(note) = parse_note(&path, size) {
+                if !note_has_tags(&note, &tag_filters) {
+                    println!("Skipped {id} (missing tag filter)");
+                    continue;
                 }
             }
-            fs::remove_file(&path)?;
-            println!("Deleted {id}");
-            deleted += 1;
-        } else {
-            println!("Note {id} not found");
         }
+        fs::rename(&path, note_path(&trash_dir, &id))?;
+        println!("Moved {id} to trash");
+        deleted += 1;
     }
     if deleted == 0 {
         println!("No notes deleted.");
@@ -899,15 +995,151 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
 /// Remove every note in the current notes directory.
 fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
+    let trash_dir = area_dir(dir, Area::Trash);
+    ensure_dir(&trash_dir)?;
+    clean_trash(&trash_dir)?;
     let files = list_note_files(dir)?;
     if files.is_empty() {
         println!("No notes to delete.");
         return Ok(());
     }
     for (path, _) in files {
-        fs::remove_file(&path)?;
+        let id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
+        fs::rename(&path, note_path(&trash_dir, &id))?;
     }
-    println!("Deleted all notes.");
+    println!("Moved all notes to trash.");
+    Ok(())
+}
+
+fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    let mut use_fzf = false;
+    let mut ids: Vec<String> = Vec::new();
+    let mut iter = args.into_iter();
+    while let Some(a) = iter.next() {
+        if a == "--fzf" {
+            use_fzf = true;
+        } else {
+            ids.push(a);
+        }
+    }
+
+    let archive_dir = area_dir(dir, Area::Archive);
+    ensure_dir(&archive_dir)?;
+
+    if ids.is_empty() {
+        if !use_fzf && !has_fzf() {
+            return Err(
+                "Provide ids or install fzf / use --fzf for interactive archive"
+                    .into(),
+            );
+        }
+        if !has_fzf() {
+            return Err(
+                "fzf not available; cannot launch interactive archive".into()
+            );
+        }
+
+        let files = list_note_files(dir)?;
+        if files.is_empty() {
+            println!("No notes to archive.");
+            return Ok(());
+        }
+        let input = files
+            .iter()
+            .map(|(p, _)| p.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let mut child = Command::new("fzf")
+            .arg("--multi")
+            .arg("--preview")
+            .arg("sed -n '1,120p' {}")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin.write_all(input.as_bytes())?;
+        }
+        let output = child.wait_with_output()?;
+        if !output.status.success() || output.stdout.is_empty() {
+            println!("No selection made; nothing archived.");
+            return Ok(());
+        }
+        let selected_paths = String::from_utf8_lossy(&output.stdout);
+        ids = selected_paths
+            .lines()
+            .filter_map(|l| Path::new(l).file_stem()?.to_str())
+            .map(|s| s.to_string())
+            .collect();
+    }
+
+    let mut moved = 0;
+    for id in ids {
+        let src = note_path(dir, &id);
+        if !src.exists() {
+            println!("Note {id} not found");
+            continue;
+        }
+        fs::rename(&src, note_path(&archive_dir, &id))?;
+        println!("Archived {id}");
+        moved += 1;
+    }
+    if moved == 0 {
+        println!("No notes archived.");
+    }
+    Ok(())
+}
+
+fn undelete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    if args.is_empty() {
+        return Err("Usage: qn undelete <id>...".into());
+    }
+    let trash_dir = area_dir(dir, Area::Trash);
+    ensure_dir(&trash_dir)?;
+    clean_trash(&trash_dir)?;
+    let mut restored = 0;
+    for id in args {
+        match restore_note(&id, &trash_dir, dir) {
+            Ok(new_id) => {
+                println!("Restored {new_id}");
+                restored += 1;
+            }
+            Err(e) => eprintln!("{e}"),
+        }
+    }
+    if restored == 0 {
+        println!("No notes restored.");
+    }
+    Ok(())
+}
+
+fn unarchive_notes(
+    args: Vec<String>,
+    dir: &Path,
+) -> Result<(), Box<dyn Error>> {
+    if args.is_empty() {
+        return Err("Usage: qn unarchive <id>...".into());
+    }
+    let archive_dir = area_dir(dir, Area::Archive);
+    ensure_dir(&archive_dir)?;
+    let mut restored = 0;
+    for id in args {
+        match restore_note(&id, &archive_dir, dir) {
+            Ok(new_id) => {
+                println!("Unarchived {new_id}");
+                restored += 1;
+            }
+            Err(e) => eprintln!("{e}"),
+        }
+    }
+    if restored == 0 {
+        println!("No notes unarchived.");
+    }
     Ok(())
 }
 
@@ -1074,7 +1306,8 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let rows_render: Vec<Vec<String>> =
         rows.into_iter().map(|(t, c, f, l)| vec![t, c, f, l]).collect();
     let table = render_table(&headers, &rows_render);
-    println!("{table}");
+    let lines: Vec<String> = table.lines().map(|l| l.to_string()).collect();
+    paginate_and_print(&lines)?;
     Ok(())
 }
 
@@ -1243,6 +1476,60 @@ fn list_note_files(dir: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
         }
     }
     Ok(files)
+}
+
+fn trash_retention_days() -> i64 {
+    env::var("QUICK_NOTES_TRASH_RETENTION_DAYS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|v: &i64| *v >= 0)
+        .unwrap_or(30)
+}
+
+fn clean_trash(trash_dir: &Path) -> io::Result<()> {
+    let retention = trash_retention_days();
+    if retention == 0 {
+        return Ok(());
+    }
+    let cutoff = now_fixed() - chrono::Duration::days(retention);
+    for (path, size) in list_note_files(trash_dir)? {
+        if let Ok(note) = parse_note(&path, size) {
+            if let Some(updated) = parse_timestamp(&note.updated) {
+                if updated < cutoff {
+                    let _ = fs::remove_file(path);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn restore_note(
+    id: &str,
+    from_dir: &Path,
+    to_dir: &Path,
+) -> Result<String, Box<dyn Error>> {
+    let src = note_path(from_dir, id);
+    if !src.exists() {
+        return Err(format!("Note {id} not found").into());
+    }
+    ensure_dir(to_dir)?;
+    let mut final_id = id.to_string();
+    let dst = note_path(to_dir, &final_id);
+    if dst.exists() {
+        let mut reserved = HashSet::new();
+        let new_id = generate_new_id(to_dir, &mut reserved)?;
+        let size = fs::metadata(&src)?.len();
+        let mut note = parse_note(&src, size)?;
+        note.id = new_id.clone();
+        note.updated = timestamp_string();
+        write_note(&note, to_dir)?;
+        fs::remove_file(src)?;
+        final_id = new_id;
+    } else {
+        fs::rename(src, &dst)?;
+    }
+    Ok(final_id)
 }
 
 fn preview_line(note: &Note) -> String {

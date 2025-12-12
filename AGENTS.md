@@ -16,14 +16,19 @@ can quickly assist users.
   tags.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag]`
   — list notes with compact previews; search across title/body; filter by tag.
+- `qn list-deleted` / `qn list-archived` — list trashed or archived notes with
+  the same flags as `list`.
 - `qn view <id> [--plain] [-t tag]` — show rendered Markdown by default;
   optional tag guard; `--plain` disables color.
 - `qn render <id>` — shortcut to rendered view.
 - `qn edit <id> [-t tag]` — edit in `$EDITOR`; if `fzf` exists, uses a ~70%
   popup with preview and multi-select; optional tag guard.
-- `qn delete <ids...> [--fzf] [-t tag]` — delete notes; interactive
+- `qn delete <ids...> [--fzf] [-t tag]` — soft delete to `trash`; interactive
   multi-select if `fzf` is present and no ids provided; optional tag guard.
-- `qn delete-all` — remove every note.
+- `qn delete-all` — move every note to `trash`.
+- `qn archive <ids...> [--fzf]` — move notes to `archive` (kept indefinitely).
+- `qn undelete <ids...>` / `qn unarchive <ids...>` — restore from `trash` or
+  `archive` (renames on conflict).
 - `qn tags` — list tags with counts and first/last usage; pinned tags stay
   visible even if unused.
 - `qn seed <count> [--chars N] [--markdown] [-t tag]` — generate bulk test

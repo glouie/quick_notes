@@ -22,16 +22,21 @@ human-friendly US-local format.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s|--search text]
   [-t|--tag tag]` — show ids with updated timestamp and a preview (default sort:
   updated desc).
+- `qn list-deleted` / `qn list-archived` — list trashed or archived notes with
+  the same flags as `list` (sorting, search, tags, relative time).
 - `qn view <id>` — rendered view by default (headings, lists, rules). Add
   `--plain`/`-p` or set `NO_COLOR=1` to disable color.
 - `qn edit <id> [-t tag]` — opens in `$EDITOR` (falls back to `vi`); if `fzf`
   is installed, it uses a 70% height popup with preview and multi-select, then
   opens all chosen notes together and refreshes the Updated timestamp. Optional
   tag guard.
-- `qn delete <id> [more ids...] [-t tag]` — delete one or more notes; use
-  `--fzf` or call with no ids (and fzf installed) to pick multiple notes in an
+- `qn delete <id> [more ids...] [-t tag]` — soft-delete to `trash`; use `--fzf`
+  or call with no ids (and fzf installed) to pick multiple notes in an
   interactive preview list; optional tag guard for safety.
-- `qn delete-all` — delete every note in the notes directory.
+- `qn delete-all` — soft-delete every note to `trash`.
+- `qn archive <id>...` — move notes to `archive` (kept indefinitely).
+- `qn undelete <id>...` / `qn unarchive <id>...` — restore from `trash` or
+  `archive` (renames on conflict).
 - `qn seed <count> [--chars N] [-t tag] [--markdown]` — generate test notes
   (for load/perf checks) with random content of N characters (default 400) and
   optional tags; `--markdown` seeds rich Markdown samples. Argument order is
