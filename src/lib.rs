@@ -1064,14 +1064,14 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         }
     };
     let first_label = if relative_time {
-        "First (rel)".to_string()
+        "First".to_string()
     } else {
         determine_tz_label()
             .map(|t| format!("First ({t})"))
             .unwrap_or_else(|| "First".to_string())
     };
     let last_label = if relative_time {
-        "Last (rel)".to_string()
+        "Last".to_string()
     } else {
         determine_tz_label()
             .map(|t| format!("Last ({t})"))
@@ -1678,7 +1678,7 @@ fn format_timestamp_table(
 }
 
 fn updated_label(relative: bool) -> String {
-    if relative { "Updated (rel)".to_string() } else { updated_label_with_tz() }
+    if relative { "Updated".to_string() } else { updated_label_with_tz() }
 }
 
 fn updated_label_with_tz() -> String {
