@@ -307,6 +307,7 @@ fn list_notes_in(
         term_width,
         relative_time,
         &now,
+        area,
     );
 
     let mut lines: Vec<String> = Vec::new();
@@ -325,6 +326,7 @@ fn list_notes_in(
         use_color,
         relative_time,
         &now,
+        area,
     );
     lines.push(header.clone());
     lines.push("=".repeat(display_len(&header)));
@@ -344,6 +346,7 @@ fn list_notes_in(
             use_color,
             relative_time,
             &now,
+            area,
         );
         lines.push(line);
     }
@@ -375,12 +378,13 @@ fn column_widths(
     term_width: usize,
     relative: bool,
     now: &DateTime<FixedOffset>,
+    area: Area,
 ) -> ColumnWidths {
     let updated_label = updated_label(relative);
     let updated_data_width = notes
         .iter()
         .map(|n| {
-            format_timestamp_table(&n.updated, relative, now).chars().count()
+            display_timestamp(area, &n.updated, relative, now).chars().count()
         })
         .max()
         .unwrap_or_else(|| updated_label.len().max("Updated".len()));
@@ -534,13 +538,14 @@ fn format_list_row(
     use_color: bool,
     relative: bool,
     now: &DateTime<FixedOffset>,
+    area: Area,
 ) -> String {
     let id_plain = truncate_with_ellipsis(id, widths.id);
     let id_len = display_len(&id_plain);
     let id_display = format_id(&id_plain, use_color);
 
     let updated_plain = truncate_with_ellipsis(
-        &format_timestamp_table(updated, relative, now),
+        &display_timestamp(area, updated, relative, now),
         widths.updated,
     );
     let updated_len = display_len(&updated_plain);
@@ -983,7 +988,7 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        fs::rename(&path, note_path(&trash_dir, &id))?;
+        move_note_with_timestamp(dir, &trash_dir, &id)?;
         println!("Moved {id} to trash");
         deleted += 1;
     }
@@ -1004,12 +1009,9 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
     for (path, _) in files {
-        let id = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default()
-            .to_string();
-        fs::rename(&path, note_path(&trash_dir, &id))?;
+        if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
+            move_note_with_timestamp(dir, &trash_dir, id)?;
+        }
     }
     println!("Moved all notes to trash.");
     Ok(())
@@ -1085,7 +1087,7 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             println!("Note {id} not found");
             continue;
         }
-        fs::rename(&src, note_path(&archive_dir, &id))?;
+        move_note_with_timestamp(dir, &archive_dir, &id)?;
         println!("Archived {id}");
         moved += 1;
     }
@@ -1532,6 +1534,24 @@ fn restore_note(
     Ok(final_id)
 }
 
+fn move_note_with_timestamp(
+    from_dir: &Path,
+    to_dir: &Path,
+    id: &str,
+) -> Result<(), Box<dyn Error>> {
+    let src = note_path(from_dir, id);
+    if !src.exists() {
+        return Err(format!("Note {id} not found").into());
+    }
+    let size = fs::metadata(&src)?.len();
+    let mut note = parse_note(&src, size)?;
+    note.updated = timestamp_string();
+    ensure_dir(to_dir)?;
+    write_note(&note, to_dir)?;
+    fs::remove_file(src)?;
+    Ok(())
+}
+
 fn preview_line(note: &Note) -> String {
     let first_line =
         note.body.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
@@ -1746,6 +1766,26 @@ fn format_timestamp_table(
 
 fn updated_label(relative: bool) -> String {
     if relative { "Updated".to_string() } else { updated_label_with_tz() }
+}
+
+fn display_timestamp(
+    area: Area,
+    ts: &str,
+    relative: bool,
+    now: &DateTime<FixedOffset>,
+) -> String {
+    match area {
+        Area::Active => format_timestamp_table(ts, relative, now),
+        Area::Trash | Area::Archive => {
+            let abs = format_timestamp_table(ts, false, now);
+            let rel = if let Some(dt) = parse_timestamp(ts) {
+                format_relative(dt, now)
+            } else {
+                "n/a".to_string()
+            };
+            format!("{abs} ({rel})")
+        }
+    }
 }
 
 fn updated_label_with_tz() -> String {
