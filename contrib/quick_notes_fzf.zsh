@@ -17,15 +17,15 @@ _qn() {
 
   # First arg: subcommand selection.
   if (( CURRENT == 1 || CURRENT == 2 )); then
-    compadd add new list view render edit delete delete-all seed tags path help completion
+    compadd add new list view render edit delete delete-all seed tags path help completion list-deleted list-archived archive undelete unarchive stats
     return
   fi
 
   case $cmd in
-    list) _qn_list_opts ;;
+    list|list-deleted|list-archived) _qn_list_opts ;;
     view|render) _qn_view_opts ;;
     edit) _qn_edit_opts ;;
-    delete) _qn_delete_opts ;;
+    delete|archive|add) _qn_delete_opts ;;
     seed) _qn_seed_opts ;;
     add|new) _qn_add_new_opts ;;
     tags) _qn_tags_opts ;;

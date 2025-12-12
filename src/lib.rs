@@ -105,8 +105,8 @@ fn print_help() {
         "\
 Quick Notes CLI
 Usage:
-  qn add \"note text\" [-t tag...] Quick add with generated title and optional \
-tags
+  qn add <id> \"text\"             Append text to an existing note (fzf id \
+completion)
   qn new <title> [body...] [-t tag...]
                                   New note with title and optional body/tags
   qn list [--sort <field>] [--asc|--desc] [-s|--search <text>] [-t|--tag <tag>]
