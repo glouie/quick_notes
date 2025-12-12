@@ -551,7 +551,7 @@ fn view_note(
     while let Some(arg) = args_iter.next() {
         match arg.as_str() {
             "--render" | "-r" | "render" => render = true,
-            "--plain" => plain = true,
+            "--plain" | "-p" => plain = true,
             "-t" | "--tag" => {
                 if let Some(v) = args_iter.next() {
                     let tag = normalize_tag(&v);
@@ -574,7 +574,8 @@ fn view_note(
     }
     if ids.is_empty() {
         return Err(
-            "Usage: qn view <id>... [--render|-r] [--plain] [-t <tag>]".into(),
+            "Usage: qn view <id>... [--render|-r] [--plain|-p] [-t <tag>]"
+                .into(),
         );
     }
 
