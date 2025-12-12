@@ -61,7 +61,10 @@ fn list_ids(output: &[u8]) -> Vec<String> {
         .lines()
         .filter_map(|line| {
             let id = line.split_whitespace().next()?;
-            if id.eq_ignore_ascii_case("id") || id == "No" {
+            if id.eq_ignore_ascii_case("id")
+                || id == "No"
+                || id.starts_with('=')
+            {
                 return None;
             }
             Some(id.to_string())
@@ -148,7 +151,7 @@ fn delete_with_tag_filter() {
     let list_str = String::from_utf8_lossy(&list_out);
     let mut keep_id = String::new();
     let mut drop_id = String::new();
-    for line in list_str.lines().skip(1) {
+    for line in list_str.lines().skip(2) {
         let id = line.split_whitespace().next().unwrap();
         if line.contains("keep me") {
             keep_id = id.to_string();
@@ -273,9 +276,10 @@ fn list_headers_align_to_columns() {
     let out_str = String::from_utf8_lossy(&out);
     let mut lines = out_str.lines();
     let header = lines.next().unwrap();
+    let _separator = lines.next().unwrap();
     let first = lines.next().unwrap();
 
-    let updated_pos = header.find("Updated").unwrap();
+    let updated_pos = header.find("Updated (TZ)").unwrap();
     let preview_pos = header.find("Preview").unwrap();
     let tags_pos = header.find("Tags").unwrap();
 

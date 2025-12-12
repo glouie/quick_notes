@@ -257,18 +257,20 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn print_list_header(widths: &ColumnWidths, use_color: bool) {
+    let updated_label = "Updated (TZ)";
     let tags_header: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
 
     let header = format_list_row(
         "ID",
-        "Updated",
+        updated_label,
         "Preview",
         tags_header.as_deref(),
         widths,
         use_color,
     );
     println!("{header}");
+    println!("{}", "=".repeat(display_len(&header)));
 }
 
 #[derive(Debug)]
@@ -294,6 +296,7 @@ fn column_widths(
     tags_plain: &[String],
     term_width: usize,
 ) -> ColumnWidths {
+    let updated_label = "Updated (TZ)";
     let id_width = notes
         .iter()
         .map(|n| n.id.chars().count())
@@ -305,7 +308,7 @@ fn column_widths(
         .map(|n| n.updated.chars().count())
         .max()
         .unwrap_or(0)
-        .max("Updated".len());
+        .max(updated_label.len());
     let preview_width = previews
         .iter()
         .map(|p| p.chars().count())
@@ -354,7 +357,7 @@ fn terminal_columns() -> Option<usize> {
 fn shrink_widths(mut w: ColumnWidths, term_width: usize) -> ColumnWidths {
     let min_preview = 4;
     let min_tags = 4;
-    let min_updated = "Updated".len();
+    let min_updated = "Updated (TZ)".len();
     let min_id = "ID".len();
 
     let reduce = |value: &mut usize, min: usize, excess: &mut isize| {
