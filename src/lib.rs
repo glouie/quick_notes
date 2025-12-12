@@ -331,24 +331,22 @@ fn list_notes_in(
     let header_preview_len = display_len(&header_preview);
     let header_tags: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
-    let tz = determine_tz_label().unwrap_or_else(|| "TZ".to_string());
     let created_header =
-        widths.include_created.then(|| format!("Created ({tz})"));
-    let (moved_header, moved_rel_header) = if widths.include_moved {
+        widths.include_created.then(|| time_label("Created", relative_time));
+    let moved_header = if widths.include_moved {
         match area {
-            Area::Trash => (Some(format!("Deleted ({tz})")), None::<String>),
-            Area::Archive => (Some(format!("Archived ({tz})")), None::<String>),
-            Area::Active => (None, None),
+            Area::Trash => Some(time_label("Deleted", relative_time)),
+            Area::Archive => Some(time_label("Archived", relative_time)),
+            Area::Active => None,
         }
     } else {
-        (None, None)
+        None
     };
     let header = format_list_row(
         "ID",
         created_header.as_deref(),
         &updated_label(relative_time),
         moved_header.as_deref(),
-        moved_rel_header.as_deref(),
         &header_preview,
         header_preview_len,
         header_tags.as_deref(),
@@ -357,6 +355,7 @@ fn list_notes_in(
         relative_time,
         &now,
         area,
+        true,
     );
     lines.push(header.clone());
     lines.push("=".repeat(display_len(&header)));
@@ -390,7 +389,6 @@ fn list_notes_in(
             created,
             &n.updated,
             moved,
-            None,
             &preview_highlighted,
             preview_len,
             if widths.include_tags { Some(n.tags.as_slice()) } else { None },
@@ -399,6 +397,7 @@ fn list_notes_in(
             relative_time,
             &now,
             area,
+            false,
         );
         lines.push(line);
     }
@@ -412,7 +411,6 @@ struct ColumnWidths {
     updated: usize,
     created: usize,
     moved: usize,
-    moved_rel: usize,
     preview: usize,
     tags: usize,
     include_tags: bool,
@@ -422,21 +420,15 @@ struct ColumnWidths {
 
 impl ColumnWidths {
     fn total(&self) -> usize {
-        let mut spaces = 6; // id|updated|preview
-        let mut total = self.id + self.updated + self.preview;
-        if self.include_created {
-            spaces += 3;
-            total += self.created;
-        }
-        if self.include_moved {
-            spaces += 6; // two columns
-            total += self.moved + self.moved_rel;
-        }
-        if self.include_tags {
-            spaces += 3;
-            total += self.tags;
-        }
-        total + spaces
+        let separator_count = 2
+            + self.include_created as usize
+            + self.include_moved as usize
+            + self.include_tags as usize;
+        let spaces = separator_count * 3;
+        let created = if self.include_created { self.created } else { 0 };
+        let moved = if self.include_moved { self.moved } else { 0 };
+        let tags = if self.include_tags { self.tags } else { 0 };
+        self.id + created + self.updated + moved + self.preview + tags + spaces
     }
 }
 
@@ -458,17 +450,14 @@ fn column_widths(
         .max()
         .unwrap_or_else(|| updated_label.len().max("Updated".len()));
     let include_created = matches!(area, Area::Trash | Area::Archive);
-    let created_label =
-        if relative && matches!(area, Area::Trash | Area::Archive) {
-            "Created"
-        } else {
-            "Created (TZ)"
-        };
+    let created_label = time_label("Created", relative);
     let created_width = if include_created {
         notes
             .iter()
             .map(|n| {
-                format_timestamp_table(&n.created, false, now).chars().count()
+                format_timestamp_table(&n.created, relative, now)
+                    .chars()
+                    .count()
             })
             .max()
             .unwrap_or(0)
@@ -478,9 +467,9 @@ fn column_widths(
     };
     let include_moved = matches!(area, Area::Trash | Area::Archive);
     let moved_label = match area {
-        Area::Trash => "Deleted",
-        Area::Archive => "Archived",
-        Area::Active => "Moved",
+        Area::Trash => time_label("Deleted", relative),
+        Area::Archive => time_label("Archived", relative),
+        Area::Active => time_label("Moved", relative),
     };
     let moved_width = if include_moved {
         notes
@@ -488,7 +477,7 @@ fn column_widths(
             .map(|n| {
                 moved_ts(area, n)
                     .map(|ts| {
-                        display_timestamp_moved(area, ts, false, now)
+                        display_timestamp_moved(area, ts, relative, now)
                             .chars()
                             .count()
                     })
@@ -500,13 +489,15 @@ fn column_widths(
     } else {
         0
     };
-    let moved_rel_width = 0;
-    let timestamp_width = updated_data_width
-        .max(created_width)
-        .max(moved_width)
-        .max(updated_label.len())
-        .max(created_label.len())
-        .max(moved_label.len());
+    let mut timestamp_width = updated_data_width.max(updated_label.len());
+    if include_created {
+        timestamp_width =
+            timestamp_width.max(created_width).max(created_label.len());
+    }
+    if include_moved {
+        timestamp_width =
+            timestamp_width.max(moved_width).max(moved_label.len());
+    }
     let id_width = notes
         .iter()
         .map(|n| n.id.chars().count())
@@ -518,14 +509,17 @@ fn column_widths(
     let created_width = if include_created { timestamp_width } else { 0 };
     let moved_width = if include_moved { timestamp_width } else { 0 };
     let moved_width = moved_width.max(moved_label.len());
-    let moved_rel_width = moved_rel_width.max(moved_label.len());
     let preview_width = previews
         .iter()
         .map(|p| p.chars().count())
         .max()
         .unwrap_or(0)
         .max("Preview".len());
-    let include_tags = notes.iter().any(|n| !n.tags.is_empty());
+    let include_tags = if matches!(area, Area::Trash | Area::Archive) {
+        false
+    } else {
+        notes.iter().any(|n| !n.tags.is_empty())
+    };
     let tags_width = if include_tags {
         tags_plain
             .iter()
@@ -542,7 +536,6 @@ fn column_widths(
         updated: updated_width,
         created: created_width,
         moved: moved_width,
-        moved_rel: moved_rel_width,
         preview: preview_width,
         tags: tags_width,
         include_tags,
@@ -594,11 +587,11 @@ fn shrink_widths(
     let min_preview = 4;
     let min_tags = 4;
     let min_updated = updated_label(relative).len();
-    let min_created = "Created".len();
-    let (min_moved, min_moved_rel) = match area {
-        Area::Trash => ("Deleted".len(), "Deleted (rel)".len()),
-        Area::Archive => ("Archived".len(), "Archived (rel)".len()),
-        Area::Active => ("Moved".len(), "Moved (rel)".len()),
+    let min_created = time_label("Created", relative).len();
+    let min_moved = match area {
+        Area::Trash => time_label("Deleted", relative).len(),
+        Area::Archive => time_label("Archived", relative).len(),
+        Area::Active => time_label("Moved", relative).len(),
     };
     let min_id = "ID".len();
 
@@ -615,9 +608,6 @@ fn shrink_widths(
     let mut excess = w.total() as isize - term_width as isize;
     if excess > 0 {
         reduce(&mut w.preview, min_preview, &mut excess);
-    }
-    if excess > 0 && w.include_moved {
-        reduce(&mut w.moved_rel, min_moved_rel, &mut excess);
     }
     if excess > 0 && w.include_moved {
         reduce(&mut w.moved, min_moved, &mut excess);
@@ -677,7 +667,6 @@ fn format_list_row(
     created: Option<&str>,
     updated: &str,
     moved: Option<&str>,
-    moved_rel_override: Option<&str>,
     preview_display: &str,
     preview_len: usize,
     tags: Option<&[String]>,
@@ -686,19 +675,31 @@ fn format_list_row(
     relative: bool,
     now: &DateTime<FixedOffset>,
     area: Area,
+    is_header: bool,
 ) -> String {
     let id_plain = truncate_with_ellipsis(id, widths.id);
     let id_len = display_len(&id_plain);
-    let id_display = format_id(&id_plain, use_color);
+    let id_display = if is_header {
+        format_header_label(&id_plain, use_color)
+    } else {
+        format_id(&id_plain, use_color)
+    };
 
     let (created_display, created_len) = if widths.include_created {
         if let Some(c) = created {
-            let created_plain = truncate_with_ellipsis(
-                &format_timestamp_table(c, false, now),
-                widths.created,
-            );
+            let created_source = if is_header {
+                c.to_string()
+            } else {
+                format_timestamp_table(c, relative, now)
+            };
+            let created_plain =
+                truncate_with_ellipsis(&created_source, widths.created);
             let len = display_len(&created_plain);
-            let disp = format_timestamp(&created_plain, use_color);
+            let disp = if is_header {
+                format_header_label(&created_plain, use_color)
+            } else {
+                format_timestamp(&created_plain, use_color)
+            };
             (Some(disp), len)
         } else {
             (Some(String::new()), 0)
@@ -707,21 +708,35 @@ fn format_list_row(
         (None, 0)
     };
 
-    let updated_plain = truncate_with_ellipsis(
-        &display_timestamp(area, updated, relative, now),
-        widths.updated,
-    );
+    let updated_source = if is_header {
+        updated.to_string()
+    } else {
+        display_timestamp(area, updated, relative, now)
+    };
+    let updated_plain = truncate_with_ellipsis(&updated_source, widths.updated);
     let updated_len = display_len(&updated_plain);
-    let updated_display = format_timestamp(&updated_plain, use_color);
+    let updated_display = if is_header {
+        format_header_label(&updated_plain, use_color)
+    } else {
+        format_timestamp(&updated_plain, use_color)
+    };
 
+    let moved_source_holder;
     let (moved_display, moved_len) = if widths.include_moved {
         if let Some(m) = moved {
-            let moved_plain = truncate_with_ellipsis(
-                &display_timestamp_moved(area, m, false, now),
-                widths.moved,
-            );
+            moved_source_holder = if is_header {
+                m.to_string()
+            } else {
+                display_timestamp_moved(area, m, relative, now)
+            };
+            let moved_plain =
+                truncate_with_ellipsis(&moved_source_holder, widths.moved);
             let len = display_len(&moved_plain);
-            let disp = format_timestamp(&moved_plain, use_color);
+            let disp = if is_header {
+                format_header_label(&moved_plain, use_color)
+            } else {
+                format_timestamp(&moved_plain, use_color)
+            };
             (Some(disp), len)
         } else {
             (Some(String::new()), 0)
@@ -730,24 +745,12 @@ fn format_list_row(
         (None, 0)
     };
 
-    let (moved_rel_display, moved_rel_len) = if widths.include_moved {
-        if let Some(label) = moved_rel_override {
-            let plain = truncate_with_ellipsis(label, widths.moved_rel);
-            let len = display_len(&plain);
-            (Some(format_timestamp(&plain, use_color)), len)
-        } else if let Some(m) = moved {
-            let moved_rel_plain = truncate_with_ellipsis(
-                &display_relative_moved(area, m, now),
-                widths.moved_rel,
-            );
-            let len = display_len(&moved_rel_plain);
-            let disp = format_timestamp(&moved_rel_plain, use_color);
-            (Some(disp), len)
-        } else {
-            (Some(String::new()), 0)
-        }
+    let preview_holder;
+    let preview_for_row = if is_header {
+        preview_holder = format_header_label(preview_display, use_color);
+        &preview_holder
     } else {
-        (None, 0)
+        preview_display
     };
 
     let (tags_display, tags_len) = if widths.include_tags {
@@ -763,8 +766,7 @@ fn format_list_row(
         &updated_display,
         updated_len,
         moved_display.as_deref().map(|s| (s, moved_len)),
-        moved_rel_display.as_deref().map(|s| (s, moved_rel_len)),
-        &preview_display,
+        preview_for_row,
         preview_len,
         if widths.include_tags {
             Some((&tags_display, tags_len))
@@ -782,7 +784,6 @@ fn assemble_row(
     updated_display: &str,
     updated_len: usize,
     moved_display: Option<(&str, usize)>,
-    moved_rel_display: Option<(&str, usize)>,
     preview_display: &str,
     preview_len: usize,
     tags: Option<(&str, usize)>,
@@ -799,10 +800,6 @@ fn assemble_row(
     line.push_str(" | ");
     if let Some((mv, len)) = moved_display {
         line.push_str(&pad_field(mv, widths.moved, len));
-        line.push_str(" | ");
-    }
-    if let Some((mv_rel, len)) = moved_rel_display {
-        line.push_str(&pad_field(mv_rel, widths.moved_rel, len));
         line.push_str(" | ");
     }
     line.push_str(&pad_field(preview_display, widths.preview, preview_len));
@@ -2004,7 +2001,17 @@ fn format_timestamp_table(
 }
 
 fn updated_label(relative: bool) -> String {
-    updated_label_with_tz()
+    time_label("Updated", relative)
+}
+
+fn time_label(base: &str, relative: bool) -> String {
+    if relative {
+        base.to_string()
+    } else {
+        determine_tz_label()
+            .map(|tz| format!("{base} ({tz})"))
+            .unwrap_or_else(|| base.to_string())
+    }
 }
 
 fn display_timestamp(
@@ -2037,29 +2044,12 @@ fn display_timestamp_moved(
     format_timestamp_table(ts, relative, now)
 }
 
-fn display_relative_moved(
-    _area: Area,
-    ts: &str,
-    now: &DateTime<FixedOffset>,
-) -> String {
-    match parse_timestamp(ts) {
-        Some(dt) => format_relative(dt, now),
-        None => String::new(),
-    }
-}
-
 fn moved_ts<'a>(area: Area, note: &'a Note) -> Option<&'a str> {
     match area {
         Area::Trash => note.deleted_at.as_deref(),
         Area::Archive => note.archived_at.as_deref(),
         Area::Active => None,
     }
-}
-
-fn updated_label_with_tz() -> String {
-    determine_tz_label()
-        .map(|tz| format!("Updated ({tz})"))
-        .unwrap_or_else(|| "Updated".to_string())
 }
 
 fn determine_tz_label() -> Option<String> {
