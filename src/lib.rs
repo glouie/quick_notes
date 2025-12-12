@@ -992,7 +992,6 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let now = now_fixed();
     let use_color = env::var("NO_COLOR").is_err();
-    let mut rows: Vec<(String, String, String, String)> = Vec::new();
     let header_color = |text: &str| {
         if use_color {
             format_header_label(text, true)
@@ -1014,14 +1013,8 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             .map(|t| format!("Last ({t})"))
             .unwrap_or_else(|| "Last".to_string())
     };
-    rows.push((
-        header_color("Tag"),
-        header_color("Count"),
-        header_color(&first_label),
-        header_color(&last_label),
-    ));
-
     let mut rows_raw: Vec<(String, TagStat)> = stats.into_iter().collect();
+    let mut rows: Vec<(String, String, String, String)> = Vec::new();
     rows_raw.sort_by(|a, b| {
         match (a.1.last, b.1.last) {
             (Some(la), Some(lb)) => lb.cmp(&la),

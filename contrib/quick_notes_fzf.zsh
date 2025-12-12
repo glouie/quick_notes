@@ -68,9 +68,10 @@ _qn_delete_opts() {
 _qn_seed_opts() {
   _arguments -C \
     '--markdown[seed markdown samples]' \
-    '--chars[body length]:chars:' \
+    '--chars[body length]:chars:(200 400 800 1200)' \
     '(-t --tag)'{-t,--tag}'[tag to apply]:tag:' \
-    '1:count'
+    '1:count' \
+    '2:body (optional when not using --markdown)'
 }
 
 _qn_add_new_opts() {
