@@ -1715,9 +1715,10 @@ fn clean_trash(trash_dir: &Path) -> io::Result<()> {
     let cutoff = now_fixed() - chrono::Duration::days(retention);
     for (path, size) in list_note_files(trash_dir)? {
         if let Ok(note) = parse_note(&path, size) {
-            if let Some(updated) = parse_timestamp(&note.updated) {
-                if updated < cutoff {
-                    let _ = fs::remove_file(path);
+            let ts_str = note.deleted_at.as_deref().unwrap_or(&note.updated);
+            if let Some(ts) = parse_timestamp(ts_str) {
+                if ts < cutoff {
+                    let _ = fs::remove_file(&path);
                 }
             }
         }
@@ -2048,12 +2049,8 @@ fn display_relative_moved(
 
 fn moved_ts<'a>(area: Area, note: &'a Note) -> Option<&'a str> {
     match area {
-        Area::Trash => {
-            note.deleted_at.as_deref().or_else(|| Some(note.updated.as_str()))
-        }
-        Area::Archive => {
-            note.archived_at.as_deref().or_else(|| Some(note.updated.as_str()))
-        }
+        Area::Trash => note.deleted_at.as_deref(),
+        Area::Archive => note.archived_at.as_deref(),
         Area::Active => None,
     }
 }
