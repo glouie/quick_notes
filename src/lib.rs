@@ -519,6 +519,8 @@ fn column_widths(
         .max("ID".len());
     // Keep updated column tight to the widest value or header.
     let updated_width = updated_data_width.max(updated_label.len());
+    let moved_width = moved_width.max(moved_label.len());
+    let moved_rel_width = moved_rel_width.max(moved_rel_label.len());
     let preview_width = previews
         .iter()
         .map(|p| p.chars().count())
