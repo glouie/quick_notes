@@ -331,16 +331,13 @@ fn list_notes_in(
     let header_preview_len = display_len(&header_preview);
     let header_tags: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
-    let created_header = widths.include_created.then(|| "Created".to_string());
+    let tz = determine_tz_label().unwrap_or_else(|| "TZ".to_string());
+    let created_header =
+        widths.include_created.then(|| format!("Created ({tz})"));
     let (moved_header, moved_rel_header) = if widths.include_moved {
         match area {
-            Area::Trash => {
-                (Some("Deleted".to_string()), Some("Deleted (rel)".to_string()))
-            }
-            Area::Archive => (
-                Some("Archived".to_string()),
-                Some("Archived (rel)".to_string()),
-            ),
+            Area::Trash => (Some(format!("Deleted ({tz})")), None::<String>),
+            Area::Archive => (Some(format!("Archived ({tz})")), None::<String>),
             Area::Active => (None, None),
         }
     } else {
@@ -480,11 +477,7 @@ fn column_widths(
         Area::Archive => "Archived",
         Area::Active => "Moved",
     };
-    let moved_rel_label = match area {
-        Area::Trash => "Deleted (rel)",
-        Area::Archive => "Archived (rel)",
-        Area::Active => "Rel",
-    };
+    let moved_rel_label = moved_label.clone();
     let moved_width = if include_moved {
         notes
             .iter()
@@ -503,22 +496,7 @@ fn column_widths(
     } else {
         0
     };
-    let moved_rel_width = if include_moved {
-        notes
-            .iter()
-            .map(|n| {
-                moved_ts(area, n)
-                    .map(|ts| {
-                        display_relative_moved(area, ts, now).chars().count()
-                    })
-                    .unwrap_or(0)
-            })
-            .max()
-            .unwrap_or(0)
-            .max(moved_rel_label.len())
-    } else {
-        0
-    };
+    let moved_rel_width = 0;
     let timestamp_width = updated_data_width
         .max(created_width)
         .max(moved_width)
