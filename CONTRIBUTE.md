@@ -45,7 +45,7 @@ explains how it is built and how to extend it.
 - `list_notes` — reads `.md` files, parses metadata, sorts, and renders rows
   via shared table helpers.
 - `view_note` — prints raw or rendered markdown (respecting `--render`/`-r` and
-  `--plain`/`NO_COLOR`); uses `glow` when present.
+  `--plain`/`-p`/`NO_COLOR`); uses `glow` when present.
 - `edit_note` — opens the file in an editor, then re-parses and rewrites to
   refresh the `Updated` timestamp (with optional tag guard).
 - `render_markdown` / `highlight_inline_code` (render) — color headings, lists,

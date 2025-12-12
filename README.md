@@ -23,7 +23,7 @@ human-friendly US-local format.
   [-t|--tag tag]` — show ids with updated timestamp and a preview (default sort:
   updated desc).
 - `qn view <id>` — rendered view by default (headings, lists, rules). Add
-  `--plain` or set `NO_COLOR=1` to disable color.
+  `--plain`/`-p` or set `NO_COLOR=1` to disable color.
 - `qn edit <id> [-t tag]` — opens in `$EDITOR` (falls back to `vi`); if `fzf`
   is installed, it uses a 70% height popup with preview and multi-select, then
   opens all chosen notes together and refreshes the Updated timestamp. Optional

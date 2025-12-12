@@ -57,6 +57,8 @@ can quickly assist users.
   - `src/table.rs` — ANSI-aware width helpers and generic table rendering used
     in listings.
 - Completion script: `contrib/quick_notes_fzf.zsh` (fzf-powered zsh).
+- Linting/tests: run `cargo fmt` and `cargo test` before committing; `NO_COLOR`
+  and `QUICK_NOTES_NO_FZF` are set in tests to keep output deterministic.
 
 ## Important Behaviors
 

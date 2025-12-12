@@ -260,13 +260,16 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     print_list_header(&widths, use_color, relative_time, &now);
 
     for (idx, n) in notes.iter().enumerate() {
-        let preview = &previews[idx];
+        let preview_raw =
+            truncate_with_ellipsis(&previews[idx], widths.preview);
+        let preview_len = display_len(&preview_raw);
         let preview_highlighted =
-            highlight_search(preview, search.as_deref(), use_color);
+            highlight_search(&preview_raw, search.as_deref(), use_color);
         let line = format_list_row(
             &n.id,
             &n.updated,
             &preview_highlighted,
+            preview_len,
             if widths.include_tags { Some(n.tags.as_slice()) } else { None },
             &widths,
             use_color,
@@ -288,10 +291,14 @@ fn print_list_header(
     let tags_header: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
 
+    let header_preview =
+        truncate_with_ellipsis("Preview", widths.preview).to_string();
+    let header_preview_len = display_len(&header_preview);
     let header = format_list_row(
         "ID",
         &updated_label,
-        "Preview",
+        &header_preview,
+        header_preview_len,
         tags_header.as_deref(),
         widths,
         use_color,
@@ -428,7 +435,8 @@ fn shrink_widths(
 fn format_list_row(
     id: &str,
     updated: &str,
-    preview: &str,
+    preview_display: &str,
+    preview_len: usize,
     tags: Option<&[String]>,
     widths: &ColumnWidths,
     use_color: bool,
@@ -436,19 +444,15 @@ fn format_list_row(
     now: &DateTime<FixedOffset>,
 ) -> String {
     let id_plain = truncate_with_ellipsis(id, widths.id);
-    let id_len = id_plain.chars().count();
+    let id_len = display_len(&id_plain);
     let id_display = format_id(&id_plain, use_color);
 
     let updated_plain = truncate_with_ellipsis(
         &format_timestamp_table(updated, relative, now),
         widths.updated,
     );
-    let updated_len = updated_plain.chars().count();
+    let updated_len = display_len(&updated_plain);
     let updated_display = format_timestamp(&updated_plain, use_color);
-
-    let preview_plain = truncate_with_ellipsis(preview, widths.preview);
-    let preview_len = preview_plain.chars().count();
-    let preview_display = preview_plain.clone();
 
     let (tags_display, tags_len) = if widths.include_tags {
         format_tags_clamped(tags.unwrap_or(&[]), widths.tags, use_color)
