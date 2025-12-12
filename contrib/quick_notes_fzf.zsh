@@ -25,7 +25,7 @@ _qn() {
     list|list-deleted|list-archived) _qn_list_opts ;;
     view|render) _qn_view_opts ;;
     edit) _qn_edit_opts ;;
-    delete|archive|add) _qn_delete_opts ;;
+    delete|archive|add|undelete|unarchive) _qn_delete_opts ;;
     seed) _qn_seed_opts ;;
     add|new) _qn_add_new_opts ;;
     tags) _qn_tags_opts ;;
