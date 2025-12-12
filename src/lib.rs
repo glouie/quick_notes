@@ -332,37 +332,12 @@ fn list_notes_in(
     let header_tags: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
     let tz = determine_tz_label().unwrap_or_else(|| "TZ".to_string());
-    let created_header = widths.include_created.then(|| {
-        if relative_time && matches!(area, Area::Trash | Area::Archive) {
-            "Created".to_string()
-        } else {
-            format!("Created ({tz})")
-        }
-    });
+    let created_header =
+        widths.include_created.then(|| format!("Created ({tz})"));
     let (moved_header, moved_rel_header) = if widths.include_moved {
         match area {
-            Area::Trash => {
-                let label = if relative_time { "Deleted" } else { "Deleted" };
-                (
-                    Some(
-                        format!("{label} ({tz})")
-                            .trim_end_matches(" ()")
-                            .to_string(),
-                    ),
-                    None::<String>,
-                )
-            }
-            Area::Archive => {
-                let label = if relative_time { "Archived" } else { "Archived" };
-                (
-                    Some(
-                        format!("{label} ({tz})")
-                            .trim_end_matches(" ()")
-                            .to_string(),
-                    ),
-                    None::<String>,
-                )
-            }
+            Area::Trash => (Some(format!("Deleted ({tz})")), None::<String>),
+            Area::Archive => (Some(format!("Archived ({tz})")), None::<String>),
             Area::Active => (None, None),
         }
     } else {
@@ -2029,7 +2004,7 @@ fn format_timestamp_table(
 }
 
 fn updated_label(relative: bool) -> String {
-    if relative { "Updated".to_string() } else { updated_label_with_tz() }
+    updated_label_with_tz()
 }
 
 fn display_timestamp(
