@@ -1,6 +1,30 @@
 //! Core library for the Quick Notes CLI.
 //! Handles note storage, listing, rendering, and tag management.
 
+//! Quick Notes core library.
+//!
+//! This crate houses the command-line implementation for `quick_notes` and the
+//! `qn` symlink, providing fast note creation, listing, search, tagging, and
+//! fuzzy selection via `fzf`. Notes are stored as UTF-8 markdown files under
+//! `~/.quick_notes` (or `QUICK_NOTES_DIR`) and are addressed by second-level
+//! timestamps to stay unique and stable. Rendering is terminal-native: plain
+//! text by default, ANSI-colorized when allowed, and `glow` is used if present
+//! for rich markdown output.
+//!
+//! The crate is intentionally a single module to keep the binary lean for
+//! `cargo install`, but the code is split into focused helpers:
+//! - `entry` parses top-level subcommands and dispatches to helpers (add/new,
+//!   list/view/render/edit/delete/delete-all/seed/tags/path/help/completion).
+//! - `Note` parsing/serialization lives in the `parse_note`, `write_note_file`,
+//!   and `note_path` helpers.
+//! - Rendering helpers (`render_markdown`, `highlight_inline_code`) keep line
+//!   structure intact for tests while supporting colored output.
+//! - CLI integration with fzf completion is provided via the `completion`
+//!   handler and the shell script in `contrib/`.
+//!
+//! See `CONTRIBUTE.md` for architecture notes and development workflows, and
+//! `AGENTS.md` for usage expectations that tests enforce.
+
 use chrono::{DateTime, FixedOffset, Local};
 use std::cmp::Ordering;
 use std::collections::HashSet;
