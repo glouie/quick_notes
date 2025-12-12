@@ -297,18 +297,19 @@ fn column_widths(
     term_width: usize,
 ) -> ColumnWidths {
     let updated_label = updated_label_with_tz();
+    let updated_data_width = notes
+        .iter()
+        .map(|n| format_timestamp_table(&n.updated).chars().count())
+        .max()
+        .unwrap_or_else(|| updated_label.len().max("Updated".len()));
     let id_width = notes
         .iter()
         .map(|n| n.id.chars().count())
         .max()
         .unwrap_or(0)
         .max("ID".len());
-    let updated_width = notes
-        .iter()
-        .map(|n| n.updated.chars().count())
-        .max()
-        .unwrap_or(0)
-        .max(updated_label.len());
+    // Keep updated column tight to the data, truncating the header if needed.
+    let updated_width = updated_data_width.max(1);
     let preview_width = previews
         .iter()
         .map(|p| p.chars().count())

@@ -279,23 +279,19 @@ fn list_headers_align_to_columns() {
     let _separator = lines.next().unwrap();
     let first = lines.next().unwrap();
 
-    let updated_pos = header.find("Updated").unwrap();
-    let preview_pos = header.find("Preview").unwrap();
-    let tags_pos = header.find("Tags").unwrap();
+    let header_cols: Vec<&str> = header.split('|').map(|s| s.trim()).collect();
+    let first_cols: Vec<&str> = first.split('|').map(|s| s.trim()).collect();
 
-    let expected_updated = "02Jan20 10:00";
-    let expected_preview = "B body";
-    let expected_tags = "#tag";
+    assert!(header_cols.len() >= 4);
+    assert_eq!(first_cols.len(), header_cols.len());
 
-    assert_eq!(
-        &first[updated_pos..updated_pos + expected_updated.len()],
-        expected_updated
-    );
-    assert_eq!(
-        &first[preview_pos..preview_pos + expected_preview.len()],
-        expected_preview
-    );
-    assert_eq!(&first[tags_pos..tags_pos + expected_tags.len()], expected_tags);
+    let updated_col = first_cols[1];
+    let preview_col = first_cols[2];
+    let tags_col = first_cols[3];
+
+    assert_eq!(updated_col, "02Jan20 10:00");
+    assert_eq!(preview_col, "B body");
+    assert_eq!(tags_col, "#tag");
 }
 
 #[test]
