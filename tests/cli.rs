@@ -172,8 +172,8 @@ fn list_sort_created_updated_size() {
         temp.path(),
         "a",
         "A",
-        "01/01/2020 10:00 AM -00:00",
-        "01/01/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:00 -00:00",
         &[],
         "short",
     );
@@ -181,8 +181,8 @@ fn list_sort_created_updated_size() {
         temp.path(),
         "b",
         "B",
-        "01/02/2020 10:00 AM -00:00",
-        "01/02/2020 10:00 AM -00:00",
+        "02Jan20 10:00 -00:00",
+        "02Jan20 10:00 -00:00",
         &[],
         "long body text here that is longer",
     );
@@ -190,8 +190,8 @@ fn list_sort_created_updated_size() {
         temp.path(),
         "c",
         "C",
-        "01/03/2020 10:00 AM -00:00",
-        "01/03/2020 10:00 AM -00:00",
+        "03Jan20 10:00 -00:00",
+        "03Jan20 10:00 -00:00",
         &[],
         "medium body",
     );
@@ -248,8 +248,8 @@ fn list_headers_align_to_columns() {
         temp.path(),
         "a",
         "A",
-        "01/01/2020 10:00 AM -00:00",
-        "01/01/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:00 -00:00",
         &[],
         "short",
     );
@@ -257,8 +257,8 @@ fn list_headers_align_to_columns() {
         temp.path(),
         "b",
         "B",
-        "01/02/2020 10:00 AM -00:00",
-        "01/02/2020 10:00 AM -00:00",
+        "02Jan20 10:00 -00:00",
+        "02Jan20 10:00 -00:00",
         &["tag"],
         "body",
     );
@@ -279,7 +279,7 @@ fn list_headers_align_to_columns() {
     let preview_pos = header.find("Preview").unwrap();
     let tags_pos = header.find("Tags").unwrap();
 
-    let expected_updated = "01/02/2020 10:00 AM -00:00";
+    let expected_updated = "02Jan20 10:00 -00:00";
     let expected_preview = "B body";
     let expected_tags = "#tag";
 
@@ -301,8 +301,8 @@ fn migrate_ids_renames_existing_notes() {
         temp.path(),
         "2024010101010101",
         "Old Id One",
-        "01/01/2020 10:00 AM -00:00",
-        "01/01/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:00 -00:00",
         &[],
         "body",
     );
@@ -310,8 +310,8 @@ fn migrate_ids_renames_existing_notes() {
         temp.path(),
         "2024010101010102",
         "Old Id Two",
-        "01/01/2020 10:00 AM -00:00",
-        "01/02/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "02Jan20 10:00 -00:00",
         &[],
         "body",
     );
@@ -347,8 +347,8 @@ fn list_respects_terminal_width() {
         temp.path(),
         "longid1234567890",
         "Very long title",
-        "01/01/2020 10:00 AM -00:00",
-        "01/02/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "02Jan20 10:00 -00:00",
         &["firsttag", "secondtag", "thirdtag"],
         "This is an extremely long preview body that should be trimmed to fit \
 within the provided terminal width for testing purposes.",
@@ -378,8 +378,8 @@ fn view_multiple_notes() {
         temp.path(),
         "id1",
         "First",
-        "01/01/2020 10:00 AM -00:00",
-        "01/01/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:00 -00:00",
         &[],
         "body one",
     );
@@ -387,8 +387,8 @@ fn view_multiple_notes() {
         temp.path(),
         "id2",
         "Second",
-        "01/02/2020 10:00 AM -00:00",
-        "01/02/2020 10:00 AM -00:00",
+        "02Jan20 10:00 -00:00",
+        "02Jan20 10:00 -00:00",
         &[],
         "body two",
     );
@@ -414,8 +414,8 @@ fn edit_multiple_notes_updates_timestamp() {
         temp.path(),
         "id1",
         "First",
-        "01/01/2020 10:00 AM -00:00",
-        "01/01/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:00 -00:00",
         &[],
         "body one",
     );
@@ -423,8 +423,8 @@ fn edit_multiple_notes_updates_timestamp() {
         temp.path(),
         "id2",
         "Second",
-        "01/01/2020 10:00 AM -00:00",
-        "01/01/2020 10:00 AM -00:00",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:00 -00:00",
         &[],
         "body two",
     );
@@ -437,8 +437,8 @@ fn edit_multiple_notes_updates_timestamp() {
 
     let n1 = read_note(temp.path(), "id1");
     let n2 = read_note(temp.path(), "id2");
-    assert!(!n1.contains("Updated: 01/01/2020 10:00 AM -00:00"));
-    assert!(!n2.contains("Updated: 01/01/2020 10:00 AM -00:00"));
+    assert!(!n1.contains("Updated: 01Jan20 10:00 -00:00"));
+    assert!(!n2.contains("Updated: 01Jan20 10:00 -00:00"));
 }
 
 #[test]

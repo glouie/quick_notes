@@ -11,6 +11,8 @@ use std::sync::{Mutex, OnceLock};
 use terminal_size::{Width, terminal_size};
 use yansi::Paint;
 
+const TIME_FMT: &str = "%d%b%y %H:%M %:z";
+const LEGACY_TIME_FMT: &str = "%m/%d/%Y %I:%M %p %:z";
 const PINNED_TAGS_DEFAULT: &str = "#todo,#meeting,#scratch";
 const ID_TS_WIDTH: usize = 9;
 
@@ -624,11 +626,18 @@ fn view_note(
             errors.push(format!("Note {id} does not have required tag(s)"));
             continue;
         }
+        let title_display = if use_color {
+            Paint::rgb(&note.title, 249, 226, 175).bold().to_string()
+        } else {
+            note.title.clone()
+        };
         let header = format!(
-            "===== {} ({}) =====\nCreated: {}\nUpdated: {}\n\n",
-            note.title,
-            note.id,
+            "===== {} ({}) =====\n{} {}\n{} {}\n\n",
+            title_display,
+            format_id(&note.id, use_color),
+            format_header_label("Created:", use_color),
             format_timestamp(&note.created, use_color),
+            format_header_label("Updated:", use_color),
             format_timestamp(&note.updated, use_color)
         );
 
@@ -1304,11 +1313,13 @@ fn short_timestamp() -> String {
 
 fn timestamp_string() -> String {
     let now = Local::now();
-    now.format("%m/%d/%Y %I:%M %p %:z").to_string()
+    now.format(TIME_FMT).to_string()
 }
 
 fn parse_timestamp(ts: &str) -> Option<DateTime<FixedOffset>> {
-    DateTime::parse_from_str(ts, "%m/%d/%Y %I:%M %p %:z").ok()
+    DateTime::parse_from_str(ts, TIME_FMT)
+        .or_else(|_| DateTime::parse_from_str(ts, LEGACY_TIME_FMT))
+        .ok()
 }
 
 fn cmp_dt(a: &str, b: &str) -> Ordering {
@@ -1472,7 +1483,7 @@ fn format_tag_text(tag: &str, use_color: bool) -> String {
 }
 
 fn format_dt(dt: &DateTime<FixedOffset>) -> String {
-    dt.format("%m/%d/%Y %I:%M %p %:z").to_string()
+    dt.format(TIME_FMT).to_string()
 }
 
 fn color_for_tag(tag: &str) -> (u8, u8, u8) {
@@ -1527,6 +1538,14 @@ fn format_id(id: &str, use_color: bool) -> String {
         Paint::rgb(id, 108, 112, 134).to_string()
     } else {
         id.to_string()
+    }
+}
+
+fn format_header_label(label: &str, use_color: bool) -> String {
+    if use_color {
+        Paint::rgb(label, 148, 226, 213).bold().to_string()
+    } else {
+        label.to_string()
     }
 }
 

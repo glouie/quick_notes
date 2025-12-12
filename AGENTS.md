@@ -38,8 +38,8 @@ can quickly assist users.
 - Each note is a Markdown file with a header:
   ```text
   Title: ...
-  Created: 12/07/2025 11:53 AM -08:00
-  Updated: 12/07/2025 11:53 AM -08:00
+  Created: 07Dec25 11:53 -08:00
+  Updated: 07Dec25 11:53 -08:00
   ---
   body...
   ```

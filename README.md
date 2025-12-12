@@ -47,8 +47,8 @@ Notes are written with a small header:
 
 ```text
 Title: My note
-Created: 05/20/2024 12:00 PM -04:00
-Updated: 05/20/2024 12:00 PM -04:00
+Created: 20May24 12:00 -04:00
+Updated: 20May24 12:00 -04:00
 Tags: #todo, #meeting
 ---
 markdown body...
