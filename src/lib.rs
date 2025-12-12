@@ -257,13 +257,13 @@ fn list_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn print_list_header(widths: &ColumnWidths, use_color: bool) {
-    let updated_label = "Updated (TZ)";
+    let updated_label = updated_label_with_tz();
     let tags_header: Option<Vec<String>> =
         if widths.include_tags { Some(vec!["Tags".to_string()]) } else { None };
 
     let header = format_list_row(
         "ID",
-        updated_label,
+        &updated_label,
         "Preview",
         tags_header.as_deref(),
         widths,
@@ -284,7 +284,7 @@ struct ColumnWidths {
 
 impl ColumnWidths {
     fn total(&self) -> usize {
-        let spaces = if self.include_tags { 3 } else { 2 };
+        let spaces = if self.include_tags { 9 } else { 6 };
         let tags = if self.include_tags { self.tags } else { 0 };
         self.id + self.updated + self.preview + tags + spaces
     }
@@ -296,7 +296,7 @@ fn column_widths(
     tags_plain: &[String],
     term_width: usize,
 ) -> ColumnWidths {
-    let updated_label = "Updated (TZ)";
+    let updated_label = updated_label_with_tz();
     let id_width = notes
         .iter()
         .map(|n| n.id.chars().count())
@@ -399,7 +399,10 @@ fn format_list_row(
     let id_len = id_plain.chars().count();
     let id_display = format_id(&id_plain, use_color);
 
-    let updated_plain = truncate_with_ellipsis(updated, widths.updated);
+    let updated_plain = truncate_with_ellipsis(
+        &format_timestamp_table(updated),
+        widths.updated,
+    );
     let updated_len = updated_plain.chars().count();
     let updated_display = format_timestamp(&updated_plain, use_color);
 
@@ -441,12 +444,12 @@ fn assemble_row(
 ) -> String {
     let mut line = String::new();
     line.push_str(&pad_field(id_display, widths.id, id_len));
-    line.push(' ');
+    line.push_str(" | ");
     line.push_str(&pad_field(updated_display, widths.updated, updated_len));
-    line.push(' ');
+    line.push_str(" | ");
     line.push_str(&pad_field(preview_display, widths.preview, preview_len));
     if widths.include_tags {
-        line.push(' ');
+        line.push_str(" | ");
         if let Some((tags_display, tags_len)) = tags {
             line.push_str(&pad_field(tags_display, widths.tags, tags_len));
         } else {
@@ -1016,24 +1019,68 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let use_color = env::var("NO_COLOR").is_err();
     let mut rows: Vec<(String, String, String, String)> = Vec::new();
+    let header_color = |text: &str| {
+        if use_color {
+            format_header_label(text, true)
+        } else {
+            text.to_string()
+        }
+    };
+    let tz_label = determine_tz_label()
+        .map(|t| format!("Last ({t})"))
+        .unwrap_or_else(|| "Last".to_string());
     rows.push((
-        "Tag".to_string(),
-        "Count".to_string(),
-        "First".to_string(),
-        "Last".to_string(),
+        header_color("Tag"),
+        header_color("Count"),
+        header_color("First"),
+        header_color(&tz_label),
     ));
 
-    for (tag, stat) in stats {
+    let mut rows_raw: Vec<(String, TagStat)> = stats.into_iter().collect();
+    rows_raw.sort_by(|a, b| {
+        match (a.1.last, b.1.last) {
+            (Some(la), Some(lb)) => lb.cmp(&la),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+        .then_with(|| b.1.count.cmp(&a.1.count))
+        .then_with(|| a.0.cmp(&b.0))
+    });
+
+    for (tag, stat) in rows_raw {
         let first = stat
             .first
-            .map(|d| format_timestamp(&format_dt(&d), use_color))
-            .unwrap_or_else(|| format_timestamp("n/a", use_color));
+            .map(|d| format_timestamp_table(&format_dt(&d)))
+            .unwrap_or_else(|| "n/a".to_string());
         let last = stat
             .last
-            .map(|d| format_timestamp(&format_dt(&d), use_color))
-            .unwrap_or_else(|| format_timestamp("n/a", use_color));
-        let tag_label = format_tag_text(&tag, use_color);
-        rows.push((tag_label, stat.count.to_string(), first, last));
+            .map(|d| format_timestamp_table(&format_dt(&d)))
+            .unwrap_or_else(|| "n/a".to_string());
+
+        let is_empty = stat.count == 0;
+        let tag_label = if is_empty {
+            format_id(&tag, use_color)
+        } else {
+            format_tag_text(&tag, use_color)
+        };
+        let count_display = if is_empty {
+            format_id(&stat.count.to_string(), use_color)
+        } else {
+            stat.count.to_string()
+        };
+        let first_display = if is_empty || first == "n/a" {
+            format_id(&first, use_color)
+        } else {
+            format_timestamp(&first, use_color)
+        };
+        let last_display = if is_empty || last == "n/a" {
+            format_id(&last, use_color)
+        } else {
+            format_timestamp(&last, use_color)
+        };
+
+        rows.push((tag_label, count_display, first_display, last_display));
     }
 
     let widths = (
@@ -1558,6 +1605,23 @@ fn format_timestamp(ts: &str, use_color: bool) -> String {
     } else {
         ts.to_string()
     }
+}
+
+fn format_timestamp_table(ts: &str) -> String {
+    if let Some(dt) = parse_timestamp(ts) {
+        return dt.format("%d%b%y %H:%M").to_string();
+    }
+    ts.split_whitespace().take(2).collect::<Vec<_>>().join(" ")
+}
+
+fn updated_label_with_tz() -> String {
+    determine_tz_label()
+        .map(|tz| format!("Updated ({tz})"))
+        .unwrap_or_else(|| "Updated".to_string())
+}
+
+fn determine_tz_label() -> Option<String> {
+    parse_timestamp(&timestamp_string()).map(|dt| dt.offset().to_string())
 }
 
 fn split_tags(args: Vec<String>) -> (Vec<String>, Vec<String>) {

@@ -279,11 +279,11 @@ fn list_headers_align_to_columns() {
     let _separator = lines.next().unwrap();
     let first = lines.next().unwrap();
 
-    let updated_pos = header.find("Updated (TZ)").unwrap();
+    let updated_pos = header.find("Updated").unwrap();
     let preview_pos = header.find("Preview").unwrap();
     let tags_pos = header.find("Tags").unwrap();
 
-    let expected_updated = "02Jan20 10:00 -00:00";
+    let expected_updated = "02Jan20 10:00";
     let expected_preview = "B body";
     let expected_tags = "#tag";
 
