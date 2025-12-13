@@ -17,7 +17,7 @@ _qn() {
 
   # First arg: subcommand selection.
   if (( CURRENT == 1 || CURRENT == 2 )); then
-    compadd add new list view render edit delete delete-all seed tags path help guide completion list-deleted list-archived archive undelete unarchive stats
+    compadd add new list view render edit delete delete-all seed tags path help guide completion list-deleted list-archived archive undelete unarchive stats migrate migrate-ids
     return
   fi
 
@@ -94,7 +94,7 @@ _qn_help_topics() {
     topic)
       local -a topics
       topics=(
-        add new list list-deleted list-archived view render edit delete delete-all archive undelete unarchive migrate-ids tags seed stats path completion help
+        add new list list-deleted list-archived view render edit delete delete-all archive undelete unarchive migrate migrate-ids tags seed stats path completion help
         getting-started searching bulk-ops
         QUICK_NOTES_DIR QUICK_NOTES_TRASH_RETENTION_DAYS QUICK_NOTES_PINNED_TAGS QUICK_NOTES_NO_FZF NO_COLOR
       )
@@ -125,6 +125,9 @@ _qn_note_ids() {
   fi
   local -a files
   files=("${(@f)$(find "$dir" -maxdepth 1 -name '*.md' -print 2>/dev/null)}")
+  if [[ -d "$dir/migrated" ]]; then
+    files+=("${(@f)$(find "$dir/migrated" -maxdepth 2 -mindepth 2 -name '*.md' -print 2>/dev/null)}")
+  fi
   if (( ${#files} == 0 )); then
     return 1
   fi

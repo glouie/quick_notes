@@ -29,6 +29,9 @@ can quickly assist users.
 - `qn archive <ids...> [--fzf]` — move notes to `archive` (kept indefinitely).
 - `qn undelete <ids...>` / `qn unarchive <ids...>` — restore from `trash` or
   `archive` (renames on conflict).
+- `qn migrate <path>` — import Markdown notes from another directory into a new
+  `migrated/<batch>` folder; keeps Created/Updated headers when present and
+  resolves id collisions.
 - `qn tags` — list tags with counts and first/last usage; pinned tags stay
   visible even if unused.
 - `qn seed <count> [--chars N] [--markdown] [-t tag]` — generate bulk test
@@ -59,8 +62,10 @@ can quickly assist users.
   - `src/note.rs` — note model, paths, ids, timestamps, read/write.
   - `src/render.rs` — markdown rendering; prefers `glow` for `view -r` when
     installed; otherwise uses internal ANSI styling.
-  - `src/table.rs` — ANSI-aware width helpers and generic table rendering used
-    in listings.
+  - `src/shared/table.rs` — ANSI-aware width helpers and generic table
+    rendering used in listings.
+  - `src/shared/migrate.rs` — migration helpers for imported note batches and
+    active note resolution.
 - Completion script: `contrib/quick_notes_fzf.zsh` (fzf-powered zsh).
 - Linting/tests: run `cargo fmt` and `cargo test` before committing; `NO_COLOR`
   and `QUICK_NOTES_NO_FZF` are set in tests to keep output deterministic.
@@ -82,6 +87,9 @@ can quickly assist users.
   unused.
 - Search: `list -s/--search` matches substring in title/body
   (case-insensitive).
+- Migration: imported notes are stored under `~/.quick_notes/migrated/<batch>`
+  and surfaced in list/view/edit/delete alongside active notes; ids are
+  preserved unless they conflict, in which case a new id is generated.
 
 ## Common Fix/Assist Tips
 

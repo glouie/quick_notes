@@ -38,6 +38,9 @@ human-friendly US-local format.
 - `qn archive <id>...` — move notes to `archive` (kept indefinitely).
 - `qn undelete <id>...` / `qn unarchive <id>...` — restore from `trash` or
   `archive` (renames on conflict).
+- `qn migrate <path>` — import Markdown notes from another folder into a
+  `migrated/<batch>` directory; keeps Created/Updated headers when present and
+  renames on id conflicts.
 - `qn seed <count> [--chars N] [-t tag] [--markdown]` — generate test notes
   (for load/perf checks) with random content of N characters (default 400) and
   optional tags; `--markdown` seeds rich Markdown samples. Argument order is
@@ -73,7 +76,10 @@ user-visible change before tagging a new version.
   - `src/lib.rs` — CLI dispatch and top-level command wiring.
   - `src/note.rs` — note model, storage paths, ID/time helpers, read/write.
   - `src/render.rs` — markdown rendering (ANSI) and `glow` detection.
-  - `src/table.rs` — ANSI-aware width helpers and generic table rendering.
+  - `src/shared/table.rs` — ANSI-aware width helpers and generic table
+    rendering.
+  - `src/shared/migrate.rs` — migration helpers and active-note resolution for
+    imported batches.
 - Shell completion: `contrib/quick_notes_fzf.zsh` (fzf-powered zsh completion).
 
 ## Tests

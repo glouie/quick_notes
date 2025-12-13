@@ -344,6 +344,105 @@ fn migrate_ids_renames_existing_notes() {
 }
 
 #[test]
+fn migrate_copies_notes_and_preserves_timestamps() {
+    let temp = TempDir::new().unwrap();
+    let src = TempDir::new().unwrap();
+    write_note_file(
+        src.path(),
+        "oldnote1",
+        "Imported",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:01 -00:00",
+        &["demo"],
+        "from elsewhere",
+    );
+
+    cmd(&temp)
+        .args(["migrate", src.path().to_str().unwrap()])
+        .assert()
+        .success();
+
+    let list_out = cmd(&temp)
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let ids = list_ids(&list_out);
+    assert!(ids.contains(&"oldnote1".to_string()));
+
+    let batch_dir = std::fs::read_dir(temp.path().join("migrated"))
+        .unwrap()
+        .next()
+        .expect("batch dir")
+        .unwrap()
+        .path();
+    let migrated = batch_dir.join("oldnote1.md");
+    let contents = fs::read_to_string(migrated).unwrap();
+    assert!(contents.contains("Created: 01Jan20 10:00 -00:00"));
+    assert!(contents.contains("Updated: 01Jan20 10:01 -00:00"));
+}
+
+#[test]
+fn migrate_generates_new_ids_on_conflict() {
+    let temp = TempDir::new().unwrap();
+    let src = TempDir::new().unwrap();
+    write_note_file(
+        temp.path(),
+        "dup123",
+        "Existing",
+        "01Jan20 10:00 -00:00",
+        "01Jan20 10:00 -00:00",
+        &[],
+        "body",
+    );
+    write_note_file(
+        src.path(),
+        "dup123",
+        "Incoming",
+        "02Jan20 11:00 -00:00",
+        "02Jan20 11:05 -00:00",
+        &[],
+        "incoming",
+    );
+
+    cmd(&temp)
+        .args(["migrate", src.path().to_str().unwrap()])
+        .assert()
+        .success();
+
+    let list_out = cmd(&temp)
+        .args(["list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let ids = list_ids(&list_out);
+    assert_eq!(ids.len(), 2);
+    assert!(ids.contains(&"dup123".to_string()));
+    let new_id = ids.into_iter().find(|id| id != "dup123").unwrap();
+
+    let migrated_root = temp.path().join("migrated");
+    let mut migrated_path = None;
+    if migrated_root.exists() {
+        for batch in fs::read_dir(migrated_root).unwrap() {
+            let batch = batch.unwrap().path();
+            let candidate = batch.join(format!("{new_id}.md"));
+            if candidate.exists() {
+                migrated_path = Some(candidate);
+                break;
+            }
+        }
+    }
+    let migrated_path =
+        migrated_path.expect("imported note written to migrated dir");
+    let contents = fs::read_to_string(migrated_path).unwrap();
+    assert!(contents.contains("Created: 02Jan20 11:00 -00:00"));
+}
+
+#[test]
 fn list_respects_terminal_width() {
     let temp = TempDir::new().unwrap();
     write_note_file(

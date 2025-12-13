@@ -283,6 +283,20 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         examples: &["qn migrate-ids"],
     },
     HelpTopic {
+        name: "migrate",
+        summary: "Import notes from another directory into a migrated batch.",
+        usage: "qn migrate <path>",
+        details: &[
+            "Copies Markdown notes from the provided folder into `~/.quick_notes/migrated/<batch>`.",
+            "Keeps Created/Updated headers when present; generates a fresh id if a collision is found.",
+            "Migrated notes show up in list/view/edit alongside existing active notes.",
+        ],
+        flags: &[],
+        aliases: &[],
+        section: Section::Command,
+        examples: &["qn migrate ~/Downloads/old_notes"],
+    },
+    HelpTopic {
         name: "tags",
         summary: "List tags with counts and first/last usage; supports search.",
         usage: "qn tags [-s text] [--relative|-r]",

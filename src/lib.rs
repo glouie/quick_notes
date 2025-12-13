@@ -28,7 +28,7 @@
 mod help;
 mod note;
 mod render;
-mod table;
+mod shared;
 
 #[derive(Clone, Copy)]
 enum Area {
@@ -43,7 +43,10 @@ use crate::note::{
     unique_id, write_note,
 };
 use crate::render::{detect_glow, render_markdown};
-use crate::table::{
+use crate::shared::migrate::{
+    list_active_note_files, migrate_notes, resolve_active_note_path,
+};
+use crate::shared::table::{
     display_len, pad_field, render_table, truncate_with_ellipsis,
 };
 use chrono::{DateTime, FixedOffset};
@@ -84,6 +87,7 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
         "archive" => archive_notes(args, &dir)?,
         "undelete" => undelete_notes(args, &dir)?,
         "unarchive" => unarchive_notes(args, &dir)?,
+        "migrate" => migrate_notes(args, &dir)?,
         "migrate-ids" => migrate_ids(&dir)?,
         "seed" => seed_notes(args, &dir)?,
         "delete-all" => delete_all_notes(&dir)?,
@@ -112,10 +116,8 @@ fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     if text.trim().is_empty() {
         return Err("Provide text to append".into());
     }
-    let path = note_path(dir, &id);
-    if !path.exists() {
-        return Err(format!("Note {id} not found").into());
-    }
+    let path = resolve_active_note_path(dir, &id)
+        .ok_or_else(|| format!("Note {id} not found"))?;
     let size = fs::metadata(&path)?.len();
     let mut note = parse_note(&path, size)?;
     if !note.body.ends_with('\n') {
@@ -124,7 +126,8 @@ fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     note.body.push_str(text.trim());
     note.body.push('\n');
     note.updated = timestamp_string();
-    write_note(&note, dir)?;
+    let target_dir = path.parent().unwrap_or(dir);
+    write_note(&note, target_dir)?;
     println!("Appended to {id}");
     Ok(())
 }
@@ -143,7 +146,7 @@ fn new_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 /// List notes with sorting, search, optional tag filters, and relative time.
-fn area_dir(base: &Path, area: Area) -> PathBuf {
+pub(crate) fn area_dir(base: &Path, area: Area) -> PathBuf {
     match area {
         Area::Active => base.to_path_buf(),
         Area::Trash => base.join("trash"),
@@ -221,7 +224,11 @@ fn list_notes_in(
     }
 
     let mut notes: Vec<Note> = Vec::new();
-    for (path, size) in list_note_files(dir)? {
+    let files = match area {
+        Area::Active => list_active_note_files(dir)?,
+        _ => list_note_files(dir)?,
+    };
+    for (path, size) in files {
         if let Ok(note) = parse_note(&path, size) {
             notes.push(note);
         }
@@ -851,11 +858,10 @@ fn view_note(
     let use_color = !plain && env::var("NO_COLOR").is_err();
     let mut errors: Vec<String> = Vec::new();
     for (idx, id) in ids.iter().enumerate() {
-        let path = note_path(dir, &id);
-        if !path.exists() {
+        let Some(path) = resolve_active_note_path(dir, id) else {
             errors.push(format!("Note {id} not found"));
             continue;
-        }
+        };
         let size = fs::metadata(&path)?.len();
         let note = parse_note(&path, size)?;
         if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
@@ -952,7 +958,7 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         if !has_fzf() {
             return Err("Usage: qn edit <id>... [-t <tag>]".into());
         }
-        let mut files = list_note_files(dir)?;
+        let mut files = list_active_note_files(dir)?;
         if !tag_filters.is_empty() {
             files.retain(|(p, size)| {
                 if let Ok(note) = parse_note(p, *size) {
@@ -1005,11 +1011,10 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let mut paths: Vec<(String, PathBuf)> = Vec::new();
     for id in ids {
-        let path = note_path(dir, &id);
-        if !path.exists() {
+        let Some(path) = resolve_active_note_path(dir, &id) else {
             eprintln!("Note {id} not found");
             continue;
-        }
+        };
         if !tag_filters.is_empty() {
             let size = fs::metadata(&path)?.len();
             if let Ok(note) = parse_note(&path, size) {
@@ -1085,7 +1090,7 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
                     .into(),
             );
         }
-        let mut files = list_note_files(dir)?;
+        let mut files = list_active_note_files(dir)?;
         if !tag_filters.is_empty() {
             files.retain(|(p, size)| {
                 if let Ok(note) = parse_note(p, *size) {
@@ -1142,11 +1147,10 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let mut deleted = 0;
     for id in ids {
-        let path = note_path(dir, &id);
-        if !path.exists() {
+        let Some(path) = resolve_active_note_path(dir, &id) else {
             println!("Note {id} not found");
             continue;
-        }
+        };
         if !tag_filters.is_empty() {
             let size = fs::metadata(&path)?.len();
             if let Ok(note) = parse_note(&path, size) {
@@ -1171,7 +1175,7 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     let trash_dir = area_dir(dir, Area::Trash);
     ensure_dir(&trash_dir)?;
     clean_trash(&trash_dir)?;
-    let files = list_note_files(dir)?;
+    let files = list_active_note_files(dir)?;
     if files.is_empty() {
         println!("No notes to delete.");
         return Ok(());
@@ -1213,7 +1217,7 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             );
         }
 
-        let files = list_note_files(dir)?;
+        let files = list_active_note_files(dir)?;
         if files.is_empty() {
             println!("No notes to archive.");
             return Ok(());
@@ -1250,11 +1254,10 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let mut moved = 0;
     for id in ids {
-        let src = note_path(dir, &id);
-        if !src.exists() {
+        let Some(_src) = resolve_active_note_path(dir, &id) else {
             println!("Note {id} not found");
             continue;
-        }
+        };
         move_note_with_timestamp(dir, &archive_dir, &id, Area::Archive)?;
         println!("Archived {id}");
         moved += 1;
@@ -1355,7 +1358,7 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let mut stats: std::collections::BTreeMap<String, TagStat> =
         std::collections::BTreeMap::new();
-    for (path, size) in list_note_files(dir)? {
+    for (path, size) in list_active_note_files(dir)? {
         if let Ok(note) = parse_note(&path, size) {
             let created = parse_timestamp(&note.created);
             let updated = parse_timestamp(&note.updated);
@@ -1636,7 +1639,7 @@ fn has_fzf() -> bool {
         .is_ok()
 }
 
-fn list_note_files(dir: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
+pub(crate) fn list_note_files(dir: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -1716,10 +1719,13 @@ fn move_note_with_timestamp(
     id: &str,
     area: Area,
 ) -> Result<(), Box<dyn Error>> {
-    let src = note_path(from_dir, id);
-    if !src.exists() {
-        return Err(format!("Note {id} not found").into());
-    }
+    let src = match area {
+        Area::Trash | Area::Archive => {
+            resolve_active_note_path(from_dir, id)
+                .ok_or_else(|| format!("Note {id} not found"))?
+        }
+        Area::Active => note_path(from_dir, id),
+    };
     let size = fs::metadata(&src)?.len();
     let mut note = parse_note(&src, size)?;
     match area {
@@ -2047,7 +2053,7 @@ fn format_relative(
 }
 
 fn stats(dir: &Path) -> Result<(), Box<dyn Error>> {
-    let active = list_note_files(dir)?.len();
+    let active = list_active_note_files(dir)?.len();
     let trash_dir = area_dir(dir, Area::Trash);
     let archive_dir = area_dir(dir, Area::Archive);
     ensure_dir(&trash_dir)?;
