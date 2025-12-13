@@ -176,6 +176,7 @@ fn list_notes_in(
     let mut search: Option<String> = None;
     let mut tag_filters: Vec<String> = Vec::new();
     let mut relative_time = false;
+    let mut paginate = true;
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -202,6 +203,7 @@ fn list_notes_in(
             "-r" | "--relative" => {
                 relative_time = true;
             }
+            "-a" | "--all" => paginate = false,
             "-t" | "--tag" => {
                 if let Some(v) = iter.next() {
                     let tag = normalize_tag(&v);
@@ -362,7 +364,7 @@ fn list_notes_in(
         );
         lines.push(line);
     }
-    paginate_and_print(&lines)?;
+    paginate_and_print(&lines, paginate)?;
     Ok(())
 }
 
@@ -589,7 +591,16 @@ fn shrink_widths(
     w
 }
 
-pub(crate) fn paginate_and_print(lines: &[String]) -> io::Result<()> {
+pub(crate) fn paginate_and_print(
+    lines: &[String],
+    paginate: bool,
+) -> io::Result<()> {
+    if !paginate {
+        for l in lines {
+            println!("{l}");
+        }
+        return Ok(());
+    }
     if !io::stdout().is_terminal() {
         for l in lines {
             println!("{l}");
@@ -614,10 +625,20 @@ pub(crate) fn paginate_and_print(lines: &[String]) -> io::Result<()> {
         }
         idx = end;
         if idx < lines.len() {
-            print!("-- more -- press Enter to continue --");
+            let prompt = "-- more -- press Enter to continue (q to quit) --";
+            print!("{prompt}");
             io::stdout().flush()?;
             let mut buf = String::new();
             io::stdin().read_line(&mut buf)?;
+            if buf.trim().eq_ignore_ascii_case("q") {
+                // Clear prompt line and exit.
+                print!("\r{:width$}\r", "", width = prompt.len());
+                io::stdout().flush()?;
+                break;
+            }
+            // Clear the prompt line after advancing.
+            print!("\r{:width$}\r", "", width = prompt.len());
+            io::stdout().flush()?;
         }
     }
     Ok(())
@@ -1116,10 +1137,24 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             .collect::<Vec<_>>()
             .join("\n");
 
+        let renderer = if Command::new("quick_notes")
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok()
+        {
+            "quick_notes"
+        } else {
+            "qn"
+        };
+
         let mut child = Command::new("fzf")
             .arg("--multi")
             .arg("--preview")
-            .arg("sed -n '1,120p' {}")
+            .arg(format!(
+                "env -u NO_COLOR CLICOLOR_FORCE=1 {renderer} render $(basename {{}}) 2>/dev/null || sed -n '1,120p' {{}}",
+            ))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
@@ -1222,6 +1257,17 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             println!("No notes to archive.");
             return Ok(());
         }
+        let renderer = if Command::new("quick_notes")
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok()
+        {
+            "quick_notes"
+        } else {
+            "qn"
+        };
         let input = files
             .iter()
             .map(|(p, _)| p.to_string_lossy())
@@ -1231,7 +1277,9 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         let mut child = Command::new("fzf")
             .arg("--multi")
             .arg("--preview")
-            .arg("sed -n '1,120p' {}")
+            .arg(format!(
+                "env -u NO_COLOR CLICOLOR_FORCE=1 {renderer} render $(basename {{}}) 2>/dev/null || sed -n '1,120p' {{}}",
+            ))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
@@ -1480,7 +1528,7 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         rows.into_iter().map(|(t, c, f, l)| vec![t, c, f, l]).collect();
     let table = render_table(&headers, &rows_render);
     let lines: Vec<String> = table.lines().map(|l| l.to_string()).collect();
-    paginate_and_print(&lines)?;
+    paginate_and_print(&lines, true)?;
     Ok(())
 }
 

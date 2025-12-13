@@ -14,19 +14,19 @@ can quickly assist users.
   ids).
 - `qn new <title> [body...] [-t tag...]` — add with explicit title and optional
   tags.
-- `qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag]`
-  — list notes with compact previews; search across title/body; filter by tag.
+- `qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [-a|--all]`
+  — list notes with compact previews; search across title/body; filter by tag; `-a` disables pagination (pager also accepts `q` to quit).
 - `qn list-deleted` / `qn list-archived` — list trashed or archived notes with
-  the same flags as `list`.
+  the same flags as `list` (including `-a/--all`).
 - `qn view <id> [--plain] [-t tag]` — show rendered Markdown by default;
   optional tag guard; `--plain` disables color.
 - `qn render <id>` — shortcut to rendered view.
 - `qn edit <id> [-t tag]` — edit in `$EDITOR`; if `fzf` exists, uses a ~70%
   popup with preview and multi-select; optional tag guard.
 - `qn delete <ids...> [--fzf] [-t tag]` — soft delete to `trash`; interactive
-  multi-select if `fzf` is present and no ids provided; optional tag guard.
+  multi-select with preview if `fzf` is present and no ids provided; optional tag guard.
 - `qn delete-all` — move every note to `trash`.
-- `qn archive <ids...> [--fzf]` — move notes to `archive` (kept indefinitely).
+- `qn archive <ids...> [--fzf]` — move notes to `archive` (kept indefinitely); interactive preview picker when `fzf` is available and no ids are given.
 - `qn undelete <ids...>` / `qn unarchive <ids...>` — restore from `trash` or
   `archive` (renames on conflict).
 - `qn migrate <path>` — import Markdown notes from another directory into a new

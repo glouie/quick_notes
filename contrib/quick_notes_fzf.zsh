@@ -17,7 +17,7 @@ _qn() {
 
   # First arg: subcommand selection.
   if (( CURRENT == 1 || CURRENT == 2 )); then
-    compadd add new list view render edit delete delete-all seed tags path help guide completion list-deleted list-archived archive undelete unarchive stats migrate migrate-ids
+    compadd add new list list-deleted list-archived view render edit delete delete-all archive undelete unarchive seed tags stats path help guide completion migrate migrate-ids
     return
   fi
 
@@ -43,7 +43,8 @@ _qn_list_opts() {
     '--desc[descending]' \
     '(-s --search)'{-s,--search}'[search text]:search:' \
     '(-r --relative)'{-r,--relative}'[show relative times]' \
-    '(-t --tag)'{-t,--tag}'[tag filter]:tag:'
+    '(-t --tag)'{-t,--tag}'[tag filter]:tag:' \
+    '(-a --all)'{-a,--all}'[disable pagination]'
 }
 
 _qn_view_opts() {
@@ -115,7 +116,7 @@ _qn_guide_topics() {
 _qn_note_ids() {
   local cmd=${words[2]}
   if [[ $cmd != view && $cmd != render && $cmd != edit \
-    && $cmd != delete && $cmd != list ]]; then
+    && $cmd != delete && $cmd != list && $cmd != archive && $cmd != undelete && $cmd != unarchive ]]; then
     return 1
   fi
 

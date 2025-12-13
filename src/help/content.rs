@@ -45,7 +45,7 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
     HelpTopic {
         name: "list",
         summary: "List notes with previews; sorted by updated desc by default.",
-        usage: "qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [--relative|-r]",
+        usage: "qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [--relative|-r] [--all|-a]",
         details: &[
             "Matches search text against title and body (case-insensitive).",
             "Tag filters accept normalized tags; multiple tags require that all are present.",
@@ -71,6 +71,10 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
                 name: "--relative, -r",
                 desc: "Show age instead of absolute timestamps.",
             },
+            HelpFlag {
+                name: "--all, -a",
+                desc: "Disable pagination; show all results.",
+            },
         ],
         aliases: &[],
         section: Section::Command,
@@ -82,7 +86,7 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
     HelpTopic {
         name: "list-deleted",
         summary: "List trashed notes with created/updated/deleted columns.",
-        usage: "qn list-deleted [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [--relative|-r]",
+        usage: "qn list-deleted [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [--relative|-r] [--all|-a]",
         details: &[
             "Behaves like list but reads from the trash directory and shows Deleted timestamps.",
             "Old trash entries expire after QUICK_NOTES_TRASH_RETENTION_DAYS (default 30).",
@@ -108,6 +112,10 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
                 name: "--relative, -r",
                 desc: "Show age instead of absolute timestamps.",
             },
+            HelpFlag {
+                name: "--all, -a",
+                desc: "Disable pagination; show all results.",
+            },
         ],
         aliases: &[],
         section: Section::Command,
@@ -116,7 +124,7 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
     HelpTopic {
         name: "list-archived",
         summary: "List archived notes; shows when each entry was archived.",
-        usage: "qn list-archived [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [--relative|-r]",
+        usage: "qn list-archived [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [--relative|-r] [--all|-a]",
         details: &[
             "Reads from the archive directory and includes Archived timestamps.",
             "Useful for finding older notes that were tucked away but not deleted.",
@@ -141,6 +149,10 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
             HelpFlag {
                 name: "--relative, -r",
                 desc: "Show age instead of absolute timestamps.",
+            },
+            HelpFlag {
+                name: "--all, -a",
+                desc: "Disable pagination; show all results.",
             },
         ],
         aliases: &[],

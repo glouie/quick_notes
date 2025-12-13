@@ -107,7 +107,7 @@ fn run_with_mode(args: Vec<String>, mode: Mode) -> Result<(), Box<dyn Error>> {
         }
     };
 
-    paginate_and_print(&lines)?;
+    paginate_and_print(&lines, true)?;
     Ok(())
 }
 

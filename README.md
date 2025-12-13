@@ -21,7 +21,7 @@ human-friendly US-local format.
   fzf).
 - `qn new "Title" [body...]` — create with explicit title and optional body.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s|--search text]
-  [-t|--tag tag]` — show ids with updated timestamp and a preview (default sort:
+  [-t|--tag tag] [--all|-a]` — show ids with updated timestamp and a preview (default sort:
   updated desc).
 - `qn list-deleted` / `qn list-archived` — list trashed or archived notes with
   the same flags as `list` (sorting, search, tags, relative time).
