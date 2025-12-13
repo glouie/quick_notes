@@ -202,7 +202,7 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         }],
         aliases: &[],
         section: Section::Command,
-        examples: &["qn edit -t #todo", "QUICK_NOTES_NO_FZF=1 qn edit id1 id2"],
+        examples: &["qn edit -t #todo"],
     },
     HelpTopic {
         name: "delete",
@@ -441,7 +441,6 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         examples: &[
             "qn list -s auth -t #decision",
             "qn list-archived -s \"2023 roadmap\" -r",
-            "QUICK_NOTES_PINNED_TAGS=\"#todo,#decision\" qn tags",
         ],
     },
     HelpTopic {
@@ -456,16 +455,12 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         flags: &[],
         aliases: &["bulk"],
         section: Section::Guide,
-        examples: &[
-            "qn seed 100 --chars 200 -t #perf",
-            "qn archive --fzf",
-            "QUICK_NOTES_TRASH_RETENTION_DAYS=7 qn list-deleted",
-        ],
+        examples: &["qn seed 100 --chars 200 -t #perf", "qn archive --fzf"],
     },
     HelpTopic {
         name: "QUICK_NOTES_DIR",
         summary: "Override the notes directory (default ~/.quick_notes).",
-        usage: "QUICK_NOTES_DIR=/path qn new ...",
+        usage: "QUICK_NOTES_DIR",
         details: &[
             "Set to point the CLI at a different workspace; affects all commands.",
             "Directory is created on demand if it does not exist.",
@@ -473,12 +468,15 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         flags: &[],
         aliases: &[],
         section: Section::Environment,
-        examples: &["QUICK_NOTES_DIR=/tmp/notes qn list"],
+        examples: &[
+            "Example: Set QUICK_NOTES_DIR to change where notes live.",
+            "Example: QUICK_NOTES_DIR=/tmp/notes qn list",
+        ],
     },
     HelpTopic {
         name: "QUICK_NOTES_TRASH_RETENTION_DAYS",
         summary: "Control how long trashed notes are kept (default 30).",
-        usage: "QUICK_NOTES_TRASH_RETENTION_DAYS=60 qn delete ...",
+        usage: "QUICK_NOTES_TRASH_RETENTION_DAYS",
         details: &[
             "Values are interpreted in days; zero disables automatic trash cleanup.",
             "Applied whenever listing or deleting trash so it stays tidy over time.",
@@ -486,12 +484,15 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         flags: &[],
         aliases: &[],
         section: Section::Environment,
-        examples: &["QUICK_NOTES_TRASH_RETENTION_DAYS=7 qn list-deleted"],
+        examples: &[
+            "Example: Set a lower value to auto-prune faster; zero disables cleanup.",
+            "Example: QUICK_NOTES_TRASH_RETENTION_DAYS=7 qn list-deleted",
+        ],
     },
     HelpTopic {
         name: "QUICK_NOTES_PINNED_TAGS",
         summary: "Comma-separated list of tags to pin in `qn tags` output.",
-        usage: "QUICK_NOTES_PINNED_TAGS=\"#todo,#scratch\" qn tags",
+        usage: "QUICK_NOTES_PINNED_TAGS",
         details: &[
             "Defaults to #todo,#meeting,#scratch; pinned tags remain visible even with zero usage.",
             "Useful for keeping common tags near the top while browsing.",
@@ -499,12 +500,15 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         flags: &[],
         aliases: &[],
         section: Section::Environment,
-        examples: &["QUICK_NOTES_PINNED_TAGS=\"#retro\" qn tags"],
+        examples: &[
+            "Example: Set pinned tags to keep them visible even with zero usage.",
+            "Example: QUICK_NOTES_PINNED_TAGS=\"#retro\" qn tags",
+        ],
     },
     HelpTopic {
         name: "QUICK_NOTES_NO_FZF",
         summary: "Disable fzf integrations even if fzf is installed.",
-        usage: "QUICK_NOTES_NO_FZF=1 qn edit",
+        usage: "QUICK_NOTES_NO_FZF",
         details: &[
             "Forces commands to skip fzf popups; useful in constrained shells or CI.",
             "Affects edit/delete/archive paths that normally launch fzf when no ids are provided.",
@@ -512,12 +516,15 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         flags: &[],
         aliases: &[],
         section: Section::Environment,
-        examples: &["QUICK_NOTES_NO_FZF=1 qn delete id1"],
+        examples: &[
+            "Example: Disable fzf popups when you want plain completion only.",
+            "Example: QUICK_NOTES_NO_FZF=1 qn delete id1",
+        ],
     },
     HelpTopic {
         name: "NO_COLOR",
         summary: "Disable colored output in render, list, and tags.",
-        usage: "NO_COLOR=1 qn list",
+        usage: "NO_COLOR",
         details: &[
             "Honored by rendering, listing, and tag displays; keeps output monochrome for piping.",
         ],
