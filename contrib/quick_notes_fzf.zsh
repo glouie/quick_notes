@@ -17,7 +17,7 @@ _qn() {
 
   # First arg: subcommand selection.
   if (( CURRENT == 1 || CURRENT == 2 )); then
-    compadd add new list view render edit delete delete-all seed tags path help completion list-deleted list-archived archive undelete unarchive stats
+    compadd add new list view render edit delete delete-all seed tags path help guide completion list-deleted list-archived archive undelete unarchive stats
     return
   fi
 
@@ -29,7 +29,9 @@ _qn() {
     seed) _qn_seed_opts ;;
     add|new) _qn_add_new_opts ;;
     tags) _qn_tags_opts ;;
-    path|help|completion|delete-all) return 0 ;;
+    help) _qn_help_topics ;;
+    guide) _qn_guide_topics ;;
+    path|completion|delete-all) return 0 ;;
     *) return 0 ;;
   esac
 }
@@ -84,6 +86,30 @@ _qn_tags_opts() {
   _arguments -C \
     '(-s --search)'{-s,--search}'[search tags]:search:' \
     '(-r --relative)'{-r,--relative}'[show relative times]'
+}
+
+_qn_help_topics() {
+  _arguments '*:topic:->topic'
+  case $state in
+    topic)
+      local -a topics
+      topics=(
+        add new list list-deleted list-archived view render edit delete delete-all archive undelete unarchive migrate-ids tags seed stats path completion help
+        getting-started searching bulk-ops
+        QUICK_NOTES_DIR QUICK_NOTES_TRASH_RETENTION_DAYS QUICK_NOTES_PINNED_TAGS QUICK_NOTES_NO_FZF NO_COLOR
+      )
+      compadd -- $topics
+    ;;
+  esac
+}
+
+_qn_guide_topics() {
+  _arguments '*:guide:->guide'
+  case $state in
+    guide)
+      compadd -- getting-started searching bulk-ops
+    ;;
+  esac
 }
 
 _qn_note_ids() {

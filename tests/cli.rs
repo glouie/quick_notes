@@ -475,6 +475,48 @@ fn path_and_help() {
 }
 
 #[test]
+fn guide_lists_guides() {
+    let temp = TempDir::new().unwrap();
+    let out = cmd(&temp)
+        .args(["guide"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("(guides)"));
+    assert!(s.contains("getting-started"));
+
+    let detail = cmd(&temp)
+        .args(["guide", "searching"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let d = String::from_utf8_lossy(&detail);
+    assert!(d.contains("searching — Search and filter strategy"));
+    assert!(d.contains("usage: qn help searching"));
+}
+
+#[test]
+fn help_topic_details() {
+    let temp = TempDir::new().unwrap();
+    let out = cmd(&temp)
+        .args(["help", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("usage: qn list"));
+    assert!(s.contains("Options:"));
+    assert!(s.contains("Substring search"));
+}
+
+#[test]
 fn add_and_list_and_view() {
     let temp = TempDir::new().unwrap();
     // create

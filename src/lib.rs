@@ -25,6 +25,7 @@
 //! See `CONTRIBUTE.md` for architecture notes and development workflows, and
 //! `AGENTS.md` for usage expectations that tests enforce.
 
+mod help;
 mod note;
 mod render;
 mod table;
@@ -62,8 +63,7 @@ const PINNED_TAGS_DEFAULT: &str = "#todo,#meeting,#scratch";
 pub fn entry() -> Result<(), Box<dyn Error>> {
     let mut args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
-        print_help();
-        return Ok(());
+        return help::run(Vec::new());
     }
 
     let cmd = args.remove(0);
@@ -71,6 +71,7 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
     ensure_dir(&dir)?;
 
     match cmd.as_str() {
+        "-h" | "--help" => help::run(args)?,
         "add" => quick_add(args, &dir)?,
         "new" => new_note(args, &dir)?,
         "list" => list_notes(args, &dir)?,
@@ -90,176 +91,15 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
         "stats" => stats(&dir)?,
         "path" => println!("{}", dir.display()),
         "completion" => print_completion(args)?,
-        "help" => print_help(),
+        "help" => help::run(args)?,
+        "guide" => help::run_guides(args)?,
         other => {
             eprintln!("Unknown command: {other}");
-            print_help();
+            help::run(Vec::new())?;
         }
     }
 
     Ok(())
-}
-
-fn print_help() {
-    struct HelpLine {
-        label: &'static str,
-        desc: &'static str,
-    }
-
-    let commands = vec![
-        HelpLine {
-            label: "add <id> \"text\"",
-            desc: "Append to an existing note (fzf id completion).",
-        },
-        HelpLine {
-            label: "new <title> [body...] [-t tag...]",
-            desc: "Create a note with title, optional body, and tags.",
-        },
-        HelpLine {
-            label: "list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [-r]",
-            desc: "List notes with previews; default sort updated desc.",
-        },
-        HelpLine {
-            label: "list-deleted [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [-r]",
-            desc: "List trash (ID | Created | Updated | Deleted | Preview).",
-        },
-        HelpLine {
-            label: "list-archived [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [-r]",
-            desc: "List archive (ID | Created | Updated | Archived | Preview).",
-        },
-        HelpLine {
-            label: "view <id>... [-t tag] [--plain|-p]",
-            desc: "Render notes by default; tag guard optional; supports fzf.",
-        },
-        HelpLine {
-            label: "edit <id>... [-t tag]",
-            desc: "Open in $EDITOR; fzf multi-select with previews.",
-        },
-        HelpLine {
-            label: "delete [ids...] [--fzf] [-t tag]",
-            desc: "Soft-delete to trash (fzf multi-select if no ids).",
-        },
-        HelpLine {
-            label: "delete-all [-s text] [-t tag]",
-            desc: "Soft-delete every note to trash.",
-        },
-        HelpLine {
-            label: "archive <ids...> [--fzf]",
-            desc: "Move notes to archive; fzf supported.",
-        },
-        HelpLine {
-            label: "undelete <ids...>",
-            desc: "Restore from trash; renames on conflict; fzf supported.",
-        },
-        HelpLine {
-            label: "unarchive <ids...>",
-            desc: "Restore from archive; renames on conflict; fzf supported.",
-        },
-        HelpLine {
-            label: "migrate-ids",
-            desc: "Regenerate note IDs to the current shorter format.",
-        },
-        HelpLine {
-            label: "tags [-s text] [-r]",
-            desc: "List tags with counts and first/last use.",
-        },
-        HelpLine {
-            label: "seed <count> [--chars N] [--markdown] [-t tag...]",
-            desc: "Generate test notes (random body of N chars; default 400).",
-        },
-        HelpLine {
-            label: "stats",
-            desc: "Show totals for active, trash, and archive.",
-        },
-        HelpLine { label: "path", desc: "Show the notes directory." },
-        HelpLine {
-            label: "completion zsh",
-            desc: "Print zsh completion script for fzf-powered shortcuts.",
-        },
-        HelpLine {
-            label: "help <command>",
-            desc: "Show help for a specific command.",
-        },
-    ];
-
-    let environment = vec![
-        HelpLine {
-            label: "Environment QUICK_NOTES_DIR",
-            desc: "Override notes directory (default ~/.quick_notes).",
-        },
-        HelpLine {
-            label: "Environment QUICK_NOTES_TRASH_RETENTION_DAYS",
-            desc: "Days to keep trashed notes (default 30).",
-        },
-    ];
-
-    let mut combined: Vec<&HelpLine> = Vec::new();
-    combined.extend(commands.iter());
-    combined.extend(environment.iter());
-
-    let term_width = terminal_columns().unwrap_or(80).min(80);
-    let min_desc = term_width / 2;
-    let mut label_width =
-        combined.iter().map(|h| h.label.len()).max().unwrap_or(0).min(36);
-    if label_width + 4 + min_desc > term_width {
-        label_width = term_width.saturating_sub(min_desc + 4);
-    }
-    let desc_width =
-        term_width.saturating_sub(2 + label_width + 2).max(min_desc);
-
-    let wrap = |text: &str, width: usize| -> Vec<String> {
-        let mut out = Vec::new();
-        let mut line = String::new();
-        for word in text.split_whitespace() {
-            if line.is_empty() {
-                line.push_str(word);
-                continue;
-            }
-            if line.len() + 1 + word.len() <= width {
-                line.push(' ');
-                line.push_str(word);
-            } else {
-                out.push(line);
-                line = word.to_string();
-            }
-        }
-        if !line.is_empty() {
-            out.push(line);
-        }
-        if out.is_empty() {
-            out.push(String::new());
-        }
-        out
-    };
-
-    let print_block = |title: &str, lines: &[HelpLine]| {
-        println!("{title}:");
-        for entry in lines {
-            let label_lines = wrap(entry.label, label_width);
-            let desc_lines = wrap(entry.desc, desc_width);
-            let rows = label_lines.len().max(desc_lines.len());
-            for idx in 0..rows {
-                let label =
-                    label_lines.get(idx).map(String::as_str).unwrap_or("");
-                let desc =
-                    desc_lines.get(idx).map(String::as_str).unwrap_or("");
-                println!(
-                    "  {:label_width$}  {}",
-                    label,
-                    desc,
-                    label_width = label_width
-                );
-            }
-        }
-        println!();
-    };
-
-    println!("Quick Notes CLI");
-    println!("usage: qn <command> [options]");
-    println!();
-    print_block("Common commands", &commands);
-    print_block("Environment", &environment);
-    println!("See 'qn help <command>' for details on a specific command.");
 }
 
 /// Append text to an existing note (requires an id).
@@ -660,7 +500,7 @@ fn column_widths(
     shrink_widths(widths, term_width, relative, area)
 }
 
-fn terminal_columns() -> Option<usize> {
+pub(crate) fn terminal_columns() -> Option<usize> {
     if let Ok(cols) = env::var("COLUMNS") {
         if let Ok(v) = cols.parse::<usize>() {
             if v > 0 {
@@ -742,7 +582,7 @@ fn shrink_widths(
     w
 }
 
-fn paginate_and_print(lines: &[String]) -> io::Result<()> {
+pub(crate) fn paginate_and_print(lines: &[String]) -> io::Result<()> {
     if !io::stdout().is_terminal() {
         for l in lines {
             println!("{l}");
