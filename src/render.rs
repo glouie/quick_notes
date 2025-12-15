@@ -115,7 +115,7 @@ pub fn detect_glow() -> Option<&'static str> {
         .stderr(Stdio::null())
         .status()
         .ok()
-        .map_or(false, |s| s.success())
+        .is_some_and(|s| s.success())
     {
         return Some("glow");
     }

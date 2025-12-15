@@ -305,21 +305,21 @@ fn list_notes_in(
     } else {
         None
     };
-    let header = format_list_row(
-        "ID",
-        created_header.as_deref(),
-        &updated_label(relative_time),
-        moved_header.as_deref(),
-        &header_preview,
-        header_preview_len,
-        header_tags.as_deref(),
-        &widths,
+    let header = format_list_row(ListRowParams {
+        id: "ID",
+        created: created_header.as_deref(),
+        updated: &updated_label(relative_time),
+        moved: moved_header.as_deref(),
+        preview_display: &header_preview,
+        preview_len: header_preview_len,
+        tags: header_tags.as_deref(),
+        widths: &widths,
         use_color,
-        relative_time,
-        &now,
+        relative: relative_time,
+        now: &now,
         area,
-        true,
-    );
+        is_header: true,
+    });
     lines.push(header.clone());
     lines.push("=".repeat(display_len(&header)));
     for (idx, n) in notes.iter().enumerate() {
@@ -336,32 +336,32 @@ fn list_notes_in(
         let moved = if widths.include_moved {
             match area {
                 Area::Trash => {
-                    n.deleted_at.as_deref().or_else(|| Some(n.updated.as_str()))
+                    n.deleted_at.as_deref().or(Some(n.updated.as_str()))
                 }
                 Area::Archive => n
                     .archived_at
                     .as_deref()
-                    .or_else(|| Some(n.updated.as_str())),
+                    .or(Some(n.updated.as_str())),
                 Area::Active => None,
             }
         } else {
             None
         };
-        let line = format_list_row(
-            &n.id,
+        let line = format_list_row(ListRowParams {
+            id: &n.id,
             created,
-            &n.updated,
+            updated: &n.updated,
             moved,
-            &preview_highlighted,
+            preview_display: &preview_highlighted,
             preview_len,
-            if widths.include_tags { Some(n.tags.as_slice()) } else { None },
-            &widths,
+            tags: if widths.include_tags { Some(n.tags.as_slice()) } else { None },
+            widths: &widths,
             use_color,
-            relative_time,
-            &now,
+            relative: relative_time,
+            now: &now,
             area,
-            false,
-        );
+            is_header: false,
+        });
         lines.push(line);
     }
     paginate_and_print(&lines, paginate)?;
@@ -644,21 +644,38 @@ pub(crate) fn paginate_and_print(
     Ok(())
 }
 
-fn format_list_row(
-    id: &str,
-    created: Option<&str>,
-    updated: &str,
-    moved: Option<&str>,
-    preview_display: &str,
+struct ListRowParams<'a> {
+    id: &'a str,
+    created: Option<&'a str>,
+    updated: &'a str,
+    moved: Option<&'a str>,
+    preview_display: &'a str,
     preview_len: usize,
-    tags: Option<&[String]>,
-    widths: &ColumnWidths,
+    tags: Option<&'a [String]>,
+    widths: &'a ColumnWidths,
     use_color: bool,
     relative: bool,
-    now: &DateTime<FixedOffset>,
+    now: &'a DateTime<FixedOffset>,
     area: Area,
     is_header: bool,
-) -> String {
+}
+
+fn format_list_row(params: ListRowParams) -> String {
+    let ListRowParams {
+        id,
+        created,
+        updated,
+        moved,
+        preview_display,
+        preview_len,
+        tags,
+        widths,
+        use_color,
+        relative,
+        now,
+        area,
+        is_header,
+    } = params;
     let id_plain = truncate_with_ellipsis(id, widths.id);
     let id_len = display_len(&id_plain);
     let id_display = if is_header {
@@ -741,36 +758,50 @@ fn format_list_row(
         (String::new(), 0)
     };
 
-    assemble_row(
-        &id_display,
+    assemble_row(AssembleRowParams {
+        id_display: &id_display,
         id_len,
-        created_display.as_deref().map(|s| (s, created_len)),
-        &updated_display,
+        created_display: created_display.as_deref().map(|s| (s, created_len)),
+        updated_display: &updated_display,
         updated_len,
-        moved_display.as_deref().map(|s| (s, moved_len)),
-        preview_for_row,
+        moved_display: moved_display.as_deref().map(|s| (s, moved_len)),
+        preview_display: preview_for_row,
         preview_len,
-        if widths.include_tags {
+        tags: if widths.include_tags {
             Some((&tags_display, tags_len))
         } else {
             None
         },
         widths,
-    )
+    })
 }
 
-fn assemble_row(
-    id_display: &str,
+struct AssembleRowParams<'a> {
+    id_display: &'a str,
     id_len: usize,
-    created_display: Option<(&str, usize)>,
-    updated_display: &str,
+    created_display: Option<(&'a str, usize)>,
+    updated_display: &'a str,
     updated_len: usize,
-    moved_display: Option<(&str, usize)>,
-    preview_display: &str,
+    moved_display: Option<(&'a str, usize)>,
+    preview_display: &'a str,
     preview_len: usize,
-    tags: Option<(&str, usize)>,
-    widths: &ColumnWidths,
-) -> String {
+    tags: Option<(&'a str, usize)>,
+    widths: &'a ColumnWidths,
+}
+
+fn assemble_row(params: AssembleRowParams) -> String {
+    let AssembleRowParams {
+        id_display,
+        id_len,
+        created_display,
+        updated_display,
+        updated_len,
+        moved_display,
+        preview_display,
+        preview_len,
+        tags,
+        widths,
+    } = params;
     let mut line = String::new();
     line.push_str(&pad_field(id_display, widths.id, id_len));
     line.push_str(" | ");
@@ -824,7 +855,7 @@ fn highlight_search(
 }
 
 fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
-    let shell = args.get(0).map(|s| s.as_str()).unwrap_or("zsh");
+    let shell = args.first().map(|s| s.as_str()).unwrap_or("zsh");
     match shell {
         "zsh" => {
             println!("{}", include_str!("../contrib/quick_notes_fzf.zsh"));
@@ -1227,8 +1258,7 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
 fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut use_fzf = false;
     let mut ids: Vec<String> = Vec::new();
-    let mut iter = args.into_iter();
-    while let Some(a) = iter.next() {
+    for a in args {
         if a == "--fzf" {
             use_fzf = true;
         } else {
@@ -1430,7 +1460,7 @@ fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     }
 
     for tag in pinned_tags {
-        stats.entry(tag).or_insert(TagStat::default());
+        stats.entry(tag).or_default();
     }
 
     if let Some(q) = &search {
@@ -2052,7 +2082,7 @@ fn display_timestamp_moved(
     format_timestamp_table(ts, relative, now)
 }
 
-fn moved_ts<'a>(area: Area, note: &'a Note) -> Option<&'a str> {
+fn moved_ts(area: Area, note: &Note) -> Option<&str> {
     match area {
         Area::Trash => note.deleted_at.as_deref(),
         Area::Archive => note.archived_at.as_deref(),
