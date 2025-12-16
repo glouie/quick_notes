@@ -15,9 +15,34 @@ fi
 _qn() {
   local cmd=${words[2]}
 
-  # First arg: subcommand selection.
+  # First arg: subcommand selection with descriptions.
   if (( CURRENT == 1 || CURRENT == 2 )); then
-    compadd add new list list-deleted list-archived view render edit delete delete-all archive undelete unarchive seed tags stats path help guide completion migrate migrate-ids
+    local -a commands
+    commands=(
+      'add:Append text to an existing note'
+      'new:Create a new note with title and body'
+      'list:List active notes'
+      'list-deleted:List deleted notes in trash'
+      'list-archived:List archived notes'
+      'view:View note content'
+      'render:Render note as markdown'
+      'edit:Edit notes in $EDITOR'
+      'delete:Move notes to trash'
+      'delete-all:Move all notes to trash'
+      'archive:Archive notes'
+      'undelete:Restore notes from trash'
+      'unarchive:Restore notes from archive'
+      'migrate:Migrate notes from old format'
+      'migrate-ids:Migrate note IDs to new format'
+      'seed:Generate test notes'
+      'tags:List all tags with usage stats'
+      'stats:Show note counts by area'
+      'path:Print notes directory path'
+      'help:Show help for commands'
+      'guide:Show usage guides'
+      'completion:Print shell completion script'
+    )
+    _describe 'command' commands
     return
   fi
 
