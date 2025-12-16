@@ -28,9 +28,7 @@ pub fn notes_dir() -> io::Result<PathBuf> {
         return Ok(PathBuf::from(dir));
     }
     let home = std::env::var("HOME").map_err(|_| {
-        io::Error::other(
-            "HOME not set; set QUICK_NOTES_DIR explicitly",
-        )
+        io::Error::other("HOME not set; set QUICK_NOTES_DIR explicitly")
     })?;
     Ok(PathBuf::from(home).join(".quick_notes"))
 }

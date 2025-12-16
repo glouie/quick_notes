@@ -30,6 +30,13 @@ mod note;
 mod render;
 mod shared;
 
+// New refactored modules
+pub mod args;
+pub mod formatting;
+pub mod fzf;
+pub mod operations;
+pub mod tags;
+
 #[derive(Clone, Copy)]
 enum Area {
     Active,
@@ -166,56 +173,43 @@ fn list_archived(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
     list_notes_in(args, &area_dir(dir, Area::Archive), Area::Archive)
 }
 
+/// List notes with sorting, filtering, and pagination.
+/// REFACTORED: Now uses new modules (args, tags)
 fn list_notes_in(
     args: Vec<String>,
     dir: &Path,
     area: Area,
 ) -> Result<(), Box<dyn Error>> {
+    // Parse arguments using new ArgParser
     let mut sort_field = "updated".to_string();
     let mut ascending = false;
     let mut search: Option<String> = None;
     let mut tag_filters: Vec<String> = Vec::new();
     let mut relative_time = false;
     let mut paginate = true;
-    let mut iter = args.into_iter();
-    while let Some(arg) = iter.next() {
+    let mut parser = args::ArgParser::new(args, "list");
+
+    while let Some(arg) = parser.next() {
         match arg.as_str() {
             "--sort" => {
-                if let Some(v) = iter.next() {
-                    sort_field = v;
-                } else {
-                    return Err(
-                        "Provide a sort field: created|updated|size".into()
-                    );
-                }
+                sort_field = parser.extract_value("--sort")?;
             }
             "--asc" => ascending = true,
             "--desc" => ascending = false,
             "-s" | "--search" => {
-                if let Some(v) = iter.next() {
-                    search = Some(v);
-                } else {
-                    return Err(
-                        "Provide a search string after -s/--search".into()
-                    );
-                }
+                search = Some(parser.extract_value("-s/--search")?);
             }
             "-r" | "--relative" => {
                 relative_time = true;
             }
             "-a" | "--all" => paginate = false,
             "-t" | "--tag" => {
-                if let Some(v) = iter.next() {
-                    let tag = normalize_tag(&v);
-                    if !tag.is_empty() {
-                        tag_filters.push(tag);
-                    }
-                } else {
-                    return Err("Provide a tag after -t/--tag".into());
+                if let Some(tag) = parser.extract_tag()? {
+                    tag_filters.push(tag);
                 }
             }
             other => {
-                return Err(format!("Unknown flag for list: {other}").into());
+                return Err(format!("Unknown flag for list: {}", other).into());
             }
         }
     }
@@ -236,6 +230,7 @@ fn list_notes_in(
         }
     }
 
+    // Filter by search query
     if let Some(q) = &search {
         let ql = q.to_lowercase();
         notes.retain(|n| {
@@ -244,8 +239,9 @@ fn list_notes_in(
         });
     }
 
+    // Use tags module for filtering
     if !tag_filters.is_empty() {
-        notes.retain(|n| note_has_tags(n, &tag_filters));
+        notes.retain(|n| tags::note_has_tags(n, &tag_filters));
     }
 
     let comparator = |a: &Note, b: &Note| -> std::cmp::Ordering {
@@ -338,10 +334,9 @@ fn list_notes_in(
                 Area::Trash => {
                     n.deleted_at.as_deref().or(Some(n.updated.as_str()))
                 }
-                Area::Archive => n
-                    .archived_at
-                    .as_deref()
-                    .or(Some(n.updated.as_str())),
+                Area::Archive => {
+                    n.archived_at.as_deref().or(Some(n.updated.as_str()))
+                }
                 Area::Active => None,
             }
         } else {
@@ -354,7 +349,11 @@ fn list_notes_in(
             moved,
             preview_display: &preview_highlighted,
             preview_len,
-            tags: if widths.include_tags { Some(n.tags.as_slice()) } else { None },
+            tags: if widths.include_tags {
+                Some(n.tags.as_slice())
+            } else {
+                None
+            },
             widths: &widths,
             use_color,
             relative: relative_time,
@@ -866,40 +865,38 @@ fn print_completion(args: Vec<String>) -> Result<(), Box<dyn Error>> {
 }
 
 /// Render or show raw notes; supports multiple ids, tag guard, and fzf.
+/// View notes with optional rendering and tag filtering.
+/// REFACTORED: Now uses new modules (args, tags)
 fn view_note(
     args: Vec<String>,
     dir: &Path,
     force_render: bool,
 ) -> Result<(), Box<dyn Error>> {
-    let mut args_iter = args.into_iter();
+    // Parse arguments using new ArgParser
     let mut ids: Vec<String> = Vec::new();
     let mut render = force_render;
     let mut plain = false;
     let mut tag_filters: Vec<String> = Vec::new();
-    while let Some(arg) = args_iter.next() {
+    let mut parser = args::ArgParser::new(args, "view");
+
+    while let Some(arg) = parser.next() {
         match arg.as_str() {
             "--render" | "-r" | "render" => render = true,
             "--plain" | "-p" => plain = true,
             "-t" | "--tag" => {
-                if let Some(v) = args_iter.next() {
-                    let tag = normalize_tag(&v);
-                    if !tag.is_empty() {
-                        tag_filters.push(tag);
-                    }
-                } else {
-                    return Err("Provide a tag after -t/--tag".into());
+                if let Some(tag) = parser.extract_tag()? {
+                    tag_filters.push(tag);
                 }
             }
-            other => {
-                if other.starts_with('-') {
-                    return Err(
-                        format!("Unknown flag for view: {other}").into()
-                    );
-                }
+            other if !other.starts_with('-') => {
                 ids.push(other.to_string());
+            }
+            other => {
+                return Err(format!("Unknown flag for view: {}", other).into());
             }
         }
     }
+
     if ids.is_empty() {
         return Err(
             "Usage: qn view <id>... [--render|-r] [--plain|-p] [-t <tag>]"
@@ -909,17 +906,25 @@ fn view_note(
 
     let use_color = !plain && env::var("NO_COLOR").is_err();
     let mut errors: Vec<String> = Vec::new();
+
     for (idx, id) in ids.iter().enumerate() {
         let Some(path) = resolve_active_note_path(dir, id) else {
             errors.push(format!("Note {id} not found"));
             continue;
         };
+
+        // Use tags module for validation
+        if !tag_filters.is_empty() {
+            if let Ok(valid) = tags::validate_note_tags(dir, id, &tag_filters) {
+                if !valid {
+                    errors.push(format!("Note {id} does not have required tag(s)"));
+                    continue;
+                }
+            }
+        }
+
         let size = fs::metadata(&path)?.len();
         let note = parse_note(&path, size)?;
-        if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
-            errors.push(format!("Note {id} does not have required tag(s)"));
-            continue;
-        }
         let title_display = if use_color {
             Paint::rgb(&note.title, 249, 226, 175).bold().to_string()
         } else {
@@ -980,97 +985,66 @@ fn view_note(
 }
 
 /// Edit one or more notes, with optional tag guard and fzf multi-select.
+/// Edit notes in $EDITOR with optional tag filtering.
+/// REFACTORED: Now uses new modules (args, fzf, tags)
 fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
-    let mut args_iter = args.into_iter();
+    // Parse arguments using new ArgParser
     let mut ids: Vec<String> = Vec::new();
     let mut tag_filters: Vec<String> = Vec::new();
-    while let Some(arg) = args_iter.next() {
+    let mut parser = args::ArgParser::new(args, "edit");
+
+    while let Some(arg) = parser.next() {
         match arg.as_str() {
             "-t" | "--tag" => {
-                if let Some(v) = args_iter.next() {
-                    let tag = normalize_tag(&v);
-                    if !tag.is_empty() {
-                        tag_filters.push(tag);
-                    }
-                } else {
-                    return Err("Provide a tag after -t/--tag".into());
+                if let Some(tag) = parser.extract_tag()? {
+                    tag_filters.push(tag);
                 }
             }
-            other => {
-                if other.starts_with('-') {
-                    return Err(
-                        format!("Unknown flag for edit: {other}").into()
-                    );
-                }
+            other if !other.starts_with('-') => {
                 ids.push(other.to_string());
+            }
+            other => {
+                return Err(format!("Unknown flag for edit: {}", other).into());
             }
         }
     }
+
+    // Use FZF selector if no IDs provided
     if ids.is_empty() {
-        if !has_fzf() {
+        if !fzf::is_fzf_available() {
             return Err("Usage: qn edit <id>... [-t <tag>]".into());
         }
-        let mut files = list_active_note_files(dir)?;
-        if !tag_filters.is_empty() {
-            files.retain(|(p, size)| {
-                if let Ok(note) = parse_note(p, *size) {
-                    note_has_tags(&note, &tag_filters)
-                } else {
-                    false
-                }
-            });
-        }
-        if files.is_empty() {
+
+        let files = list_active_note_files(dir)?;
+        let filtered_files = operations::filter_by_tags(files, &tag_filters)?;
+
+        if filtered_files.is_empty() {
             println!("No notes to edit.");
             return Ok(());
         }
 
-        let input = files
-            .iter()
-            .map(|(p, _)| p.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("\n");
+        // Use new FzfSelector with simple preview
+        let selector = fzf::FzfSelector::with_simple_preview();
+        ids = selector.select_note_ids(&filtered_files)?;
 
-        let mut child = Command::new("fzf")
-            .arg("--multi")
-            .arg("--height")
-            .arg("70%")
-            .arg("--layout")
-            .arg("reverse")
-            .arg("--preview")
-            .arg("sed -n '1,120p' {}")
-            .arg("--preview-window")
-            .arg("down:wrap")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()?;
-
-        if let Some(stdin) = child.stdin.as_mut() {
-            stdin.write_all(input.as_bytes())?;
-        }
-        let output = child.wait_with_output()?;
-        if !output.status.success() || output.stdout.is_empty() {
+        if ids.is_empty() {
             println!("No selection made; nothing opened.");
             return Ok(());
         }
-        let selected_paths = String::from_utf8_lossy(&output.stdout);
-        ids = selected_paths
-            .lines()
-            .filter_map(|l| Path::new(l).file_stem()?.to_str())
-            .map(|s| s.to_string())
-            .collect();
     }
 
+    // Validate notes and collect paths
     let mut paths: Vec<(String, PathBuf)> = Vec::new();
     for id in ids {
         let Some(path) = resolve_active_note_path(dir, &id) else {
             eprintln!("Note {id} not found");
             continue;
         };
+
+        // Use tags module for validation
         if !tag_filters.is_empty() {
-            let size = fs::metadata(&path)?.len();
-            if let Ok(note) = parse_note(&path, size) {
-                if !note_has_tags(&note, &tag_filters) {
+            if let Ok(valid) = tags::validate_note_tags(dir, &id, &tag_filters) {
+                if !valid {
                     eprintln!("Note {id} does not have required tag(s)");
                     continue;
                 }
@@ -1083,6 +1057,7 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Err("No editable notes matched the criteria".into());
     }
 
+    // Open editor
     let editor = env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
     let status = Command::new(&editor)
         .args(paths.iter().map(|(_, p)| p))
@@ -1094,13 +1069,17 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Err("Editor exited with non-zero status".into());
     }
 
+    // Update timestamps for edited notes
     for (id, path) in paths {
         let size = fs::metadata(&path)?.len();
         let mut note = parse_note(&path, size)?;
-        if !tag_filters.is_empty() && !note_has_tags(&note, &tag_filters) {
-            eprintln!("Skipped {id} (missing tag filter)");
+
+        // Re-validate tags after edit (user might have removed them)
+        if !tag_filters.is_empty() && !tags::note_has_tags(&note, &tag_filters) {
+            eprintln!("Skipped {id} (missing tag filter after edit)");
             continue;
         }
+
         note.updated = timestamp_string();
         write_note(&note, dir)?;
         println!("Updated {}", note.id);
@@ -1109,101 +1088,60 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 /// Delete notes by id or via fzf multi-select; supports tag guards.
+/// REFACTORED: Now uses new modules (args, fzf, tags, operations)
 fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    // Parse arguments using new ArgParser
     let mut use_fzf = false;
     let mut ids: Vec<String> = Vec::new();
     let mut tag_filters: Vec<String> = Vec::new();
-    let trash_dir = area_dir(dir, Area::Trash);
-    let mut iter = args.into_iter();
-    while let Some(a) = iter.next() {
-        if a == "--fzf" {
-            use_fzf = true;
-        } else if a == "-t" || a == "--tag" {
-            if let Some(v) = iter.next() {
-                let tag = normalize_tag(&v);
-                if !tag.is_empty() {
+    let mut parser = args::ArgParser::new(args, "delete");
+
+    while let Some(arg) = parser.next() {
+        match arg.as_str() {
+            "--fzf" => use_fzf = true,
+            "-t" | "--tag" => {
+                if let Some(tag) = parser.extract_tag()? {
                     tag_filters.push(tag);
                 }
-            } else {
-                return Err("Provide a tag after -t/--tag".into());
             }
-        } else {
-            ids.push(a);
+            other if !other.starts_with('-') => {
+                ids.push(other.to_string());
+            }
+            other => {
+                return Err(format!("Unknown flag: {}", other).into());
+            }
         }
     }
 
+    let trash_dir = area_dir(dir, Area::Trash);
     ensure_dir(&trash_dir)?;
     clean_trash(&trash_dir)?;
 
+    // Use FZF selector if no IDs provided
     if ids.is_empty() {
-        if !use_fzf && !has_fzf() {
+        if !use_fzf && !fzf::is_fzf_available() {
             return Err(
                 "Provide ids or install fzf / use --fzf for interactive delete"
                     .into(),
             );
         }
-        let mut files = list_active_note_files(dir)?;
-        if !tag_filters.is_empty() {
-            files.retain(|(p, size)| {
-                if let Ok(note) = parse_note(p, *size) {
-                    note_has_tags(&note, &tag_filters)
-                } else {
-                    false
-                }
-            });
-        }
-        if files.is_empty() {
+
+        let files = list_active_note_files(dir)?;
+        let filtered_files = operations::filter_by_tags(files, &tag_filters)?;
+
+        if filtered_files.is_empty() {
             println!("No notes to delete.");
             return Ok(());
         }
-        if !has_fzf() {
-            return Err(
-                "fzf not available; cannot launch interactive delete".into()
-            );
-        }
 
-        let input = files
-            .iter()
-            .map(|(p, _)| p.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("\n");
+        // Use new FzfSelector
+        let selector = fzf::FzfSelector::with_note_preview();
+        ids = selector.select_note_ids(&filtered_files)?;
 
-        let renderer = if Command::new("quick_notes")
-            .arg("--help")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
-        {
-            "quick_notes"
-        } else {
-            "qn"
-        };
-
-        let mut child = Command::new("fzf")
-            .arg("--multi")
-            .arg("--preview")
-            .arg(format!(
-                "env -u NO_COLOR CLICOLOR_FORCE=1 {renderer} render $(basename {{}}) 2>/dev/null || sed -n '1,120p' {{}}",
-            ))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()?;
-
-        if let Some(stdin) = child.stdin.as_mut() {
-            stdin.write_all(input.as_bytes())?;
-        }
-        let output = child.wait_with_output()?;
-        if !output.status.success() || output.stdout.is_empty() {
+        if ids.is_empty() {
             println!("No selection made; nothing deleted.");
             return Ok(());
         }
-        let selected_paths = String::from_utf8_lossy(&output.stdout);
-        ids = selected_paths
-            .lines()
-            .filter_map(|l| Path::new(l).file_stem()?.to_str())
-            .map(|s| s.to_string())
-            .collect();
     }
 
     if ids.is_empty() {
@@ -1211,25 +1149,30 @@ fn delete_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    // Delete notes with validation
     let mut deleted = 0;
     for id in ids {
-        let Some(path) = resolve_active_note_path(dir, &id) else {
+        if resolve_active_note_path(dir, &id).is_none() {
             println!("Note {id} not found");
             continue;
-        };
+        }
+
+        // Use tags module for validation
         if !tag_filters.is_empty() {
-            let size = fs::metadata(&path)?.len();
-            if let Ok(note) = parse_note(&path, size) {
-                if !note_has_tags(&note, &tag_filters) {
+            if let Ok(valid) = tags::validate_note_tags(dir, &id, &tag_filters)
+            {
+                if !valid {
                     println!("Skipped {id} (missing tag filter)");
                     continue;
                 }
             }
         }
+
         move_note_with_timestamp(dir, &trash_dir, &id, Area::Trash)?;
         println!("Moved {id} to trash");
         deleted += 1;
     }
+
     if deleted == 0 {
         println!("No notes deleted.");
     }
@@ -1255,30 +1198,35 @@ fn delete_all_notes(dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Archive notes by id or via fzf multi-select.
+/// REFACTORED: Now uses new modules (args, fzf, operations)
 fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    // Parse arguments using new ArgParser
     let mut use_fzf = false;
     let mut ids: Vec<String> = Vec::new();
-    for a in args {
-        if a == "--fzf" {
-            use_fzf = true;
-        } else {
-            ids.push(a);
+    let mut parser = args::ArgParser::new(args, "archive");
+
+    while let Some(arg) = parser.next() {
+        match arg.as_str() {
+            "--fzf" => use_fzf = true,
+            other if !other.starts_with('-') => {
+                ids.push(other.to_string());
+            }
+            other => {
+                return Err(format!("Unknown flag: {}", other).into());
+            }
         }
     }
 
     let archive_dir = area_dir(dir, Area::Archive);
     ensure_dir(&archive_dir)?;
 
+    // Use FZF selector if no IDs provided
     if ids.is_empty() {
-        if !use_fzf && !has_fzf() {
+        if !use_fzf && !fzf::is_fzf_available() {
             return Err(
                 "Provide ids or install fzf / use --fzf for interactive archive"
                     .into(),
-            );
-        }
-        if !has_fzf() {
-            return Err(
-                "fzf not available; cannot launch interactive archive".into()
             );
         }
 
@@ -1287,59 +1235,31 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             println!("No notes to archive.");
             return Ok(());
         }
-        let renderer = if Command::new("quick_notes")
-            .arg("--help")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
-        {
-            "quick_notes"
-        } else {
-            "qn"
-        };
-        let input = files
-            .iter()
-            .map(|(p, _)| p.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("\n");
 
-        let mut child = Command::new("fzf")
-            .arg("--multi")
-            .arg("--preview")
-            .arg(format!(
-                "env -u NO_COLOR CLICOLOR_FORCE=1 {renderer} render $(basename {{}}) 2>/dev/null || sed -n '1,120p' {{}}",
-            ))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()?;
+        let file_paths: Vec<PathBuf> = files.into_iter().map(|(p, _)| p).collect();
 
-        if let Some(stdin) = child.stdin.as_mut() {
-            stdin.write_all(input.as_bytes())?;
-        }
-        let output = child.wait_with_output()?;
-        if !output.status.success() || output.stdout.is_empty() {
+        // Use new FzfSelector
+        let selector = fzf::FzfSelector::with_note_preview();
+        ids = selector.select_note_ids(&file_paths)?;
+
+        if ids.is_empty() {
             println!("No selection made; nothing archived.");
             return Ok(());
         }
-        let selected_paths = String::from_utf8_lossy(&output.stdout);
-        ids = selected_paths
-            .lines()
-            .filter_map(|l| Path::new(l).file_stem()?.to_str())
-            .map(|s| s.to_string())
-            .collect();
     }
 
+    // Archive notes
     let mut moved = 0;
     for id in ids {
-        let Some(_src) = resolve_active_note_path(dir, &id) else {
+        if resolve_active_note_path(dir, &id).is_none() {
             println!("Note {id} not found");
             continue;
-        };
+        }
         move_note_with_timestamp(dir, &archive_dir, &id, Area::Archive)?;
         println!("Archived {id}");
         moved += 1;
     }
+
     if moved == 0 {
         println!("No notes archived.");
     }
@@ -1395,37 +1315,29 @@ fn unarchive_notes(
 }
 
 /// Show tags with counts and first/last usage; supports search and relative time.
+/// REFACTORED: Now uses new modules (args, tags)
 fn list_tags(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
+    // Parse arguments using new ArgParser
     let mut search: Option<String> = None;
     let mut relative_time = false;
-    let mut iter = args.into_iter();
-    while let Some(arg) = iter.next() {
+    let mut parser = args::ArgParser::new(args, "tags");
+
+    while let Some(arg) = parser.next() {
         match arg.as_str() {
             "-s" | "--search" => {
-                if let Some(v) = iter.next() {
-                    search = Some(v);
-                } else {
-                    return Err(
-                        "Provide a search string after -s/--search".into()
-                    );
-                }
+                search = Some(parser.extract_value("-s/--search")?);
             }
             "-r" | "--relative" => {
                 relative_time = true;
             }
             other => {
-                return Err(format!("Unknown flag for tags: {other}").into());
+                return Err(format!("Unknown flag for tags: {}", other).into());
             }
         }
     }
 
-    let pinned = env::var("QUICK_NOTES_PINNED_TAGS")
-        .unwrap_or_else(|_| PINNED_TAGS_DEFAULT.to_string());
-    let pinned_tags: Vec<String> = pinned
-        .split(',')
-        .map(|t| normalize_tag(t.trim()))
-        .filter(|t| !t.is_empty())
-        .collect();
+    // Use tags module for pinned tags
+    let pinned_tags = tags::get_pinned_tags();
 
     #[derive(Default, Clone)]
     struct TagStat {
