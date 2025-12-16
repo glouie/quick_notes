@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
@@ -27,7 +27,7 @@ impl FzfSelector {
     pub fn with_note_preview() -> Self {
         let renderer = get_renderer_name();
         let preview = format!(
-            "env -u NO_COLOR CLICOLOR_FORCE=1 {} render $(basename {{}}) 2>/dev/null || sed -n '1,120p' {{}}",
+            "env -u NO_COLOR CLICOLOR_FORCE=1 {} render {{}} 2>/dev/null",
             renderer
         );
         Self {
@@ -134,19 +134,20 @@ impl FzfSelector {
         &self,
         paths: &[PathBuf],
     ) -> Result<Vec<String>, Box<dyn Error>> {
-        let selected = self.select_from_paths(paths)?;
-
-        let ids = selected
+        // Extract IDs first, then pass them to FZF
+        let ids: Vec<String> = paths
             .iter()
-            .filter_map(|path_str| {
-                Path::new(path_str)
-                    .file_stem()
+            .filter_map(|p| {
+                p.file_stem()
                     .and_then(|s| s.to_str())
                     .map(|s| s.to_string())
             })
             .collect();
 
-        Ok(ids)
+        let input = ids.join("\n");
+        let selected = self.select_from_input(&input)?;
+
+        Ok(selected)
     }
 }
 
