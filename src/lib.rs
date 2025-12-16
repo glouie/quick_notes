@@ -67,8 +67,6 @@ use std::process::{Command, Stdio};
 use terminal_size::{Height, Width, terminal_size};
 use yansi::Paint;
 
-const PINNED_TAGS_DEFAULT: &str = "#todo,#meeting,#scratch";
-
 /// Dispatch CLI arguments to the right subcommand.
 pub fn entry() -> Result<(), Box<dyn Error>> {
     let mut args: Vec<String> = env::args().skip(1).collect();
@@ -1617,18 +1615,6 @@ fn migrate_ids(dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn has_fzf() -> bool {
-    if env::var("QUICK_NOTES_NO_FZF").is_ok() {
-        return false;
-    }
-    Command::new("fzf")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok()
-}
-
 pub(crate) fn list_note_files(dir: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir)? {
@@ -2092,10 +2078,6 @@ fn normalize_tag(t: &str) -> String {
     } else {
         format!("#{}", trimmed)
     }
-}
-
-fn note_has_tags(note: &Note, tags: &[String]) -> bool {
-    tags.iter().all(|t| note.tags.contains(t))
 }
 
 fn generate_body(len: usize, seed: usize) -> String {
