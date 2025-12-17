@@ -3,6 +3,13 @@
 All notable changes are documented in this file. Version numbers follow
 semantic versioning.
 
+## Unreleased
+
+- `qn add` now accepts body-only input to create a new note with an
+  auto-generated title from the first non-empty line (trimmed to 80 chars).
+- Added `QUICK_NOTES_FZF_HEIGHT` (and `QUICK_NOTES_FZF_FULLSCREEN`) to resize
+  the fzf picker used by `edit` when selecting notes interactively.
+
 ## [0.1.0] - 2025-12-06
 
 - Initial release of the Quick Notes CLI.

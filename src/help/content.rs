@@ -15,16 +15,20 @@ pub(crate) fn book() -> HelpBook<'static> {
 const ALL_TOPICS: &[HelpTopic<'static>] = &[
     HelpTopic {
         name: "add",
-        summary: "Append text to an existing note by id.",
-        usage: "qn add <id> \"text\"",
+        summary: "Capture text quickly or append to an existing note.",
+        usage: "qn add <id> \"text\" | qn add \"text\"",
         details: &[
-            "Reads the note body, appends the provided text (plus a trailing newline), and bumps the Updated header.",
-            "IDs can be picked quickly via shell completion; errors if the id is missing.",
+            "With an id, reads the note body, appends the provided text (plus a trailing newline), and bumps the Updated header.",
+            "With a single argument and no id, creates a new note using the provided text as the body; the title is derived from the first non-empty line (trimmed to 80 characters).",
+            "IDs can be picked quickly via shell completion; errors if the id is missing when you intend to append.",
         ],
         flags: &[],
         aliases: &[],
         section: Section::Command,
-        examples: &["qn add 07Dec25-115301 \"extra context\""],
+        examples: &[
+            "qn add 07Dec25-115301 \"extra context\"",
+            "qn add \"One-line capture from clipboard\"",
+        ],
     },
     HelpTopic {
         name: "new",
@@ -193,7 +197,7 @@ const ALL_TOPICS: &[HelpTopic<'static>] = &[
         summary: "Open notes in $EDITOR; supports tag guards and fzf multi-select.",
         usage: "qn edit <id>... [-t tag]",
         details: &[
-            "When no ids are provided, fzf launches a 70% height picker with previews (unless QUICK_NOTES_NO_FZF is set).",
+            "When no ids are provided, fzf launches a picker with previews (default 70% height; override with QUICK_NOTES_FZF_HEIGHT or QUICK_NOTES_FZF_FULLSCREEN, unless QUICK_NOTES_NO_FZF is set).",
             "After saving, the Updated header is refreshed; missing tag filters skip the note.",
         ],
         flags: &[HelpFlag {

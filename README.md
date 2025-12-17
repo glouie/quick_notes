@@ -17,8 +17,9 @@ human-friendly US-local format.
 
 ## Usage
 
-- `qn add <id> "note text"` — append text to an existing note (id completion via
-  fzf).
+- `qn add <id> "note text"` | `qn add "note text"` — append to an existing note
+  (id completion via fzf) or create a new note from body-only input with an
+  auto-generated title.
 - `qn new "Title" [body...]` — create with explicit title and optional body.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s|--search text]
   [-t|--tag tag] [--all|-a]` — show ids with updated timestamp and a preview (default sort:
@@ -28,9 +29,10 @@ human-friendly US-local format.
 - `qn view <id>` — rendered view by default (headings, lists, rules). Add
   `--plain`/`-p` or set `NO_COLOR=1` to disable color.
 - `qn edit <id> [-t tag]` — opens in `$EDITOR` (falls back to `vi`); if `fzf`
-  is installed, it uses a 70% height popup with preview and multi-select, then
-  opens all chosen notes together and refreshes the Updated timestamp. Optional
-  tag guard.
+  is installed, it uses a popup with preview and multi-select (70% height by
+  default; override with `QUICK_NOTES_FZF_HEIGHT` or go full-screen with
+  `QUICK_NOTES_FZF_FULLSCREEN`), then opens all chosen notes together and
+  refreshes the Updated timestamp. Optional tag guard.
 - `qn delete <id> [more ids...] [-t tag]` — soft-delete to `trash`; use `--fzf`
   or call with no ids (and fzf installed) to pick multiple notes in an
   interactive preview list; optional tag guard for safety.
@@ -111,8 +113,12 @@ user-visible change before tagging a new version.
     hit Enter to insert selected ids.
   - If completion fails with prompt/keymap errors, double-check that `compinit`
     runs before sourcing the script.
+- Resize the fzf picker used by `edit` via `QUICK_NOTES_FZF_HEIGHT=90%`; set
+  `QUICK_NOTES_FZF_FULLSCREEN=1` to use the full terminal height.
 - Tags:
-  - Append quickly with `qn add <id> "text"`; use completion/fzf for the id.
+  - Append quickly with `qn add <id> "text"` or capture a new note with
+    `qn add "text"` when you do not have an id handy; use completion/fzf for
+    the id.
   - Filter `list`/`view`/`edit`/`delete` by tag using `-t/--tag`.
   - List all tags with `qn tags`; pinned tags default to
     `#todo,#meeting,#scratch` (override with

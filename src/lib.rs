@@ -113,8 +113,24 @@ pub fn entry() -> Result<(), Box<dyn Error>> {
 
 /// Append text to an existing note (requires an id).
 fn quick_add(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
-    if args.len() < 2 {
-        return Err("Usage: qn add <id> \"text to append\"".into());
+    if args.is_empty() {
+        return Err(
+            "Usage: qn add <id> \"text to append\" or qn add \"text to capture\""
+                .into(),
+        );
+    }
+
+    // Single argument: create a new note using the provided body and an
+    // auto-generated title derived from the content.
+    if args.len() == 1 {
+        let body = args[0].trim().to_string();
+        if body.is_empty() {
+            return Err("Provide text to append or capture".into());
+        }
+        let title = derive_title_from_body(&body);
+        let note = create_note(title, body, Vec::new(), dir)?;
+        println!("Created note {} ({})", note.id, note.title);
+        return Ok(());
     }
     let id = args[0].clone();
     let text = args[1..].join(" ");
@@ -915,7 +931,9 @@ fn view_note(
         if !tag_filters.is_empty() {
             if let Ok(valid) = tags::validate_note_tags(dir, id, &tag_filters) {
                 if !valid {
-                    errors.push(format!("Note {id} does not have required tag(s)"));
+                    errors.push(format!(
+                        "Note {id} does not have required tag(s)"
+                    ));
                     continue;
                 }
             }
@@ -1041,7 +1059,8 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
 
         // Use tags module for validation
         if !tag_filters.is_empty() {
-            if let Ok(valid) = tags::validate_note_tags(dir, &id, &tag_filters) {
+            if let Ok(valid) = tags::validate_note_tags(dir, &id, &tag_filters)
+            {
                 if !valid {
                     eprintln!("Note {id} does not have required tag(s)");
                     continue;
@@ -1073,7 +1092,8 @@ fn edit_note(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
         let mut note = parse_note(&path, size)?;
 
         // Re-validate tags after edit (user might have removed them)
-        if !tag_filters.is_empty() && !tags::note_has_tags(&note, &tag_filters) {
+        if !tag_filters.is_empty() && !tags::note_has_tags(&note, &tag_filters)
+        {
             eprintln!("Skipped {id} (missing tag filter after edit)");
             continue;
         }
@@ -1234,7 +1254,8 @@ fn archive_notes(args: Vec<String>, dir: &Path) -> Result<(), Box<dyn Error>> {
             return Ok(());
         }
 
-        let file_paths: Vec<PathBuf> = files.into_iter().map(|(p, _)| p).collect();
+        let file_paths: Vec<PathBuf> =
+            files.into_iter().map(|(p, _)| p).collect();
 
         // Use new FzfSelector
         let selector = fzf::FzfSelector::with_note_preview();
@@ -1546,6 +1567,23 @@ fn create_note_with_tags(
     dir: &Path,
 ) -> Result<Note, Box<dyn Error>> {
     create_note(title, body, tags, dir)
+}
+
+fn derive_title_from_body(body: &str) -> String {
+    // Use the first non-empty line as the seed title.
+    let fallback = "Quick note";
+    let line =
+        body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or(fallback);
+    const MAX_LEN: usize = 80;
+    if line.chars().count() <= MAX_LEN {
+        return line.to_string();
+    }
+    let mut title = String::new();
+    for ch in line.chars().take(MAX_LEN.saturating_sub(3)) {
+        title.push(ch);
+    }
+    title.push_str("...");
+    title
 }
 
 fn create_note(

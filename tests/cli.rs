@@ -660,6 +660,42 @@ fn add_appends_to_existing_note() {
 }
 
 #[test]
+fn add_with_body_only_creates_note() {
+    let temp = TempDir::new().unwrap();
+    let output = cmd(&temp)
+        .args(["add", "Capture this standalone line"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let id = parse_added_id(&output);
+    let note = read_note(temp.path(), &id);
+    assert!(note.contains("Title: Capture this standalone line"));
+    assert!(note.contains("Capture this standalone line"));
+}
+
+#[test]
+fn add_body_only_truncates_long_title() {
+    let temp = TempDir::new().unwrap();
+    let long_body = "This is a really long capture line that will definitely exceed eighty characters so we can verify truncation is applied to the derived title for the note.";
+    let output = cmd(&temp)
+        .args(["add", long_body])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let id = parse_added_id(&output);
+    let note = read_note(temp.path(), &id);
+    let title_line =
+        note.lines().find(|l| l.starts_with("Title: ")).expect("title line");
+    assert!(title_line.ends_with("..."));
+    assert!(title_line.contains("This is a really long capture line"));
+    assert!(title_line.len() <= "Title: ".len() + 80);
+}
+
+#[test]
 fn new_with_tags_and_search_filter() {
     let temp = TempDir::new().unwrap();
     cmd(&temp)

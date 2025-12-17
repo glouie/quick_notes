@@ -142,7 +142,7 @@ mod tests {
     fn test_arg_parser_collect_remaining() {
         let args =
             vec!["id1".to_string(), "id2".to_string(), "id3".to_string()];
-        let mut parser = ArgParser::new(args, "test");
+        let parser = ArgParser::new(args, "test");
         let remaining = parser.collect_remaining();
         assert_eq!(remaining, vec!["id1", "id2", "id3"]);
     }

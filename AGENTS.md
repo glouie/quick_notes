@@ -11,7 +11,8 @@ can quickly assist users.
 - Binary name is `quick_notes`; users often add `alias qn=quick_notes`.
   Completions support both `qn` and `quick_notes`.
 - `qn add <id> "text"` — append text to an existing note (fzf completion for
-  ids).
+  ids). `qn add "text"` creates a new note with an auto-generated title from
+  the content when no id is supplied.
 - `qn new <title> [body...] [-t tag...]` — add with explicit title and optional
   tags.
 - `qn list [--sort created|updated|size] [--asc|--desc] [-s text] [-t tag] [-a|--all]`
@@ -80,7 +81,11 @@ can quickly assist users.
 - Render: uses pulldown-cmark; `--plain` or `NO_COLOR` disables color.
 - Completion: zsh script provides fzf previews for view/render/edit/delete;
   delete allows multi-select via Tab in fzf.
-- Popup edit: fzf-based preview/70% height; falls back to `$EDITOR` normally.
+- Popup edit: fzf-based preview/70% height by default; override with
+  `QUICK_NOTES_FZF_HEIGHT` or `QUICK_NOTES_FZF_FULLSCREEN`. Falls back to
+  `$EDITOR` normally.
+- Single-argument `qn add "text"` creates a new note and derives the title from
+  the first non-empty line (trimmed to 80 chars).
 - Tags: normalized to `#tag`; stored in `Tags:` header. Tag filters work on
   list/view/edit/delete. Pinned tags (default `#todo,#meeting,#scratch`,
   override via `QUICK_NOTES_PINNED_TAGS`) remain visible in `qn tags` even if

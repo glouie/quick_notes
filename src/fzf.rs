@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::io::Write;
 use std::path::PathBuf;
@@ -41,10 +42,11 @@ impl FzfSelector {
 
     /// Create selector with simple sed preview
     pub fn with_simple_preview() -> Self {
+        let height = popup_height();
         Self {
             preview_command: Some("sed -n '1,120p' {}".to_string()),
             multi_select: true,
-            height: Some("70%".to_string()),
+            height,
             layout: Some("reverse".to_string()),
             preview_window: Some("down:wrap".to_string()),
         }
@@ -138,9 +140,7 @@ impl FzfSelector {
         let ids: Vec<String> = paths
             .iter()
             .filter_map(|p| {
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
+                p.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
             })
             .collect();
 
@@ -192,9 +192,44 @@ fn get_renderer_name() -> &'static str {
     })
 }
 
+fn popup_height() -> Option<String> {
+    // Allow turning the popup into a full-screen selector by omitting height.
+    if env::var("QUICK_NOTES_FZF_FULLSCREEN").is_ok() {
+        return None;
+    }
+
+    if let Ok(height) = env::var("QUICK_NOTES_FZF_HEIGHT") {
+        let trimmed = height.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    Some("70%".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock as StdOnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: StdOnceLock<Mutex<()>> = StdOnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn set_env_var(key: &str, value: &str) {
+        unsafe { env::set_var(key, value) };
+    }
+
+    fn restore_env_var(key: &str, original: Option<String>) {
+        unsafe {
+            match original {
+                Some(v) => env::set_var(key, v),
+                None => env::remove_var(key),
+            }
+        }
+    }
 
     #[test]
     fn test_fzf_selector_builder() {
@@ -218,6 +253,7 @@ mod tests {
 
     #[test]
     fn test_with_simple_preview() {
+        let _guard = env_lock().lock().unwrap();
         let selector = FzfSelector::with_simple_preview();
         assert!(selector.multi_select);
         assert_eq!(selector.height.as_deref(), Some("70%"));
@@ -230,5 +266,33 @@ mod tests {
         let name2 = get_renderer_name();
         assert_eq!(name1, name2);
         assert!(name1 == "quick_notes" || name1 == "qn");
+    }
+
+    #[test]
+    fn popup_height_respects_env_override() {
+        let _guard = env_lock().lock().unwrap();
+        let orig_height = env::var("QUICK_NOTES_FZF_HEIGHT").ok();
+        let orig_full = env::var("QUICK_NOTES_FZF_FULLSCREEN").ok();
+
+        restore_env_var("QUICK_NOTES_FZF_FULLSCREEN", None);
+        set_env_var("QUICK_NOTES_FZF_HEIGHT", "90%");
+        assert_eq!(popup_height().as_deref(), Some("90%"));
+
+        restore_env_var("QUICK_NOTES_FZF_HEIGHT", orig_height);
+        restore_env_var("QUICK_NOTES_FZF_FULLSCREEN", orig_full);
+    }
+
+    #[test]
+    fn popup_height_allows_fullscreen() {
+        let _guard = env_lock().lock().unwrap();
+        let orig_height = env::var("QUICK_NOTES_FZF_HEIGHT").ok();
+        let orig_full = env::var("QUICK_NOTES_FZF_FULLSCREEN").ok();
+
+        set_env_var("QUICK_NOTES_FZF_FULLSCREEN", "1");
+        set_env_var("QUICK_NOTES_FZF_HEIGHT", "30%");
+        assert!(popup_height().is_none());
+
+        restore_env_var("QUICK_NOTES_FZF_HEIGHT", orig_height);
+        restore_env_var("QUICK_NOTES_FZF_FULLSCREEN", orig_full);
     }
 }
